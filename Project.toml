@@ -1,0 +1,16 @@
+name = "ExaModelsPower"
+uuid = "2fff4b78-0b6c-428d-bac8-85ccea8c4bdf"
+authors = ["Sungho Shin <sshin@anl.gov>"]
+version = "0.1.0"
+
+[deps]
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+PowerModels = "c36e90e8-916a-50a6-bd94-075b64ef4655"
+ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+
+[compat]
+ExaModels = "~0.7"
+PowerModels = "0.21"
+JLD2 = "0.4"
