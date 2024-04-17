@@ -12,5 +12,18 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 
 [compat]
 ExaModels = "~0.7"
-PowerModels = "0.21"
-JLD2 = "0.4"
+PowerModels = "~0.21"
+JLD2 = "~0.4"
+CUDA = "~5"
+MadNLP = "~0.8"
+MadNLPGPU = "~0.7"
+
+[extras]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+MadNLP = "2621e9c9-9eb4-46b1-8089-e8c72242dfb6"
+MadNLPGPU = "d72a61cc-809d-412f-99be-fd81f4b8a598"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test", "MadNLP", "MadNLPGPU", "KernelAbstractions", "CUDA"]

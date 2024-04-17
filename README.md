@@ -2,26 +2,33 @@
 ExaModelsPower.jl is an optimal power flow models using ExaModels.jl
 
 ## Usage
+### Static optimal power flow
 ```julia
 using ExaModelsPower, MadNLP, MadNLPGPU, CUDA
 
-m = opf_model(
-	"pglib_opf_case118_ieee.m";
-	backend = CUDABackend()
+model, vars = opf_model(
+    "pglib_opf_case118_ieee.m";
+    backend = CUDABackend()
 )
-madnlp(m; tol=1e-6)
+result = madnlp(model; tol=1e-6)
+```
 
-m = scopf_model(
-	"pglib_opf_case118_ieee.m";
-	backend = CUDABackend()
+### Security-constrained optimal power flow
+```julia
+model, vars = scopf_model(
+    "pglib_opf_case118_ieee.m"; contingencies = [1,2],
+    backend = CUDABackend()
 )
-madnlp(m; tol=1e-6)
+result = madnlp(model; tol=1e-6) # currently failing
+```
 
-m = mpopf_model(
-	"pglib_opf_case118_ieee.m", # static network data
-	"/home/sshin/git/ExaModels_Multiperiod/data/case118_onehour_168.Pd", # dynamic load data
-	"/home/sshin/git/ExaModels_Multiperiod/data/case118_onehour_168.Qd"; # dynamic load data
-	backend = CUDABackend()
-) 
-madnlp(m; tol=1e-6)
+### Multi-period optimal power flow
+```julia
+model, vars = mpopf_model(
+    "pglib_opf_case118_ieee.m", # static network data
+    "/home/sshin/git/ExaModels_Multiperiod/data/case118_onehour_168.Pd", # dynamic load data
+    "/home/sshin/git/ExaModels_Multiperiod/data/case118_onehour_168.Qd"; # dynamic load data
+    backend = CUDABackend()
+)
+result = madnlp(model; tol=1e-6)
 ```

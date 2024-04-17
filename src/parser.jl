@@ -1,8 +1,5 @@
 convert_data(data::N, backend) where {names,N<:NamedTuple{names}} =
     NamedTuple{names}(ExaModels.convert_array(d, backend) for d in data)
-parse_ac_power_data(filename, backend) =
-    convert_data(parse_ac_power_data(filename), backend)
-
 
 function parse_ac_power_data(filename)
     d, f = splitdir(filename)
@@ -10,7 +7,8 @@ function parse_ac_power_data(filename)
 
     if isfile(joinpath(TMPDIR, name) * ".jld2")
         @info "Loading cached JLD2 file"
-        return JLD2.load(joinpath(TMPDIR, name) * ".jld2", "data")
+        loaded = JLD2.load(joinpath(TMPDIR, name) * ".jld2")
+        return loaded["data"], loaded["dicts"] 
     else
         ff = if isfile(filename)
             filename
@@ -19,7 +17,7 @@ function parse_ac_power_data(filename)
         else
             @info "Downloading $filename"
             Downloads.download(
-                "https://raw.githubusercontent.com/power-grid-lib/pglib-opf/dc6be4b2f85ca0e776952ec22cbd4c22396ea5a3/$filename",
+                "https://raw.githubusercontent.com/power-grid-lib/pglib-opf/raw/master/$filename",
                 joinpath(TMPDIR, name * ".m"),
             )
             joinpath(TMPDIR, name * ".m")
@@ -36,10 +34,13 @@ function process_ac_power_data(filename)
 
     ref = PowerModels.build_ref(data)[:it][:pm][:nw][0]
 
-    arcdict = Dict(a => k for (k, a) in enumerate(ref[:arcs]))
-    busdict = Dict(k => i for (i, (k, v)) in enumerate(ref[:bus]))
-    gendict = Dict(k => i for (i, (k, v)) in enumerate(ref[:gen]))
-    branchdict = Dict(k => i for (i, (k, v)) in enumerate(ref[:branch]))
+
+    dicts = (
+        arc = Dict(a => k for (k, a) in enumerate(ref[:arcs])),
+        bus = Dict(k => i for (i, (k, v)) in enumerate(ref[:bus])),
+        gen = Dict(k => i for (i, (k, v)) in enumerate(ref[:gen])),
+        branch = Dict(k => i for (i, (k, v)) in enumerate(ref[:branch])),
+    )
 
     data =  (
         baseMVA = [ref[:baseMVA]],
@@ -51,26 +52,26 @@ function process_ac_power_data(filename)
                 gs = sum(shunt["gs"] for shunt in bus_shunts; init = 0.0)
                 qd = sum(load["qd"] for load in bus_loads; init = 0.0)
                 bs = sum(shunt["bs"] for shunt in bus_shunts; init = 0.0)
-                (i = busdict[k], pd = pd, gs = gs, qd = qd, bs = bs, bus_i=v["bus_i"], bus_type = v["bus_type"])
+                (i = dicts.bus[k], pd = pd, gs = gs, qd = qd, bs = bs, bus_type = v["bus_type"])
             end for (k, v) in ref[:bus]
                 ],
         gen = [
             (
-                i = gendict[k],
+                i = dicts.gen[k],
                 cost1 = v["cost"][1],
                 cost2 = v["cost"][2],
                 cost3 = v["cost"][3],
-                bus = busdict[v["gen_bus"]],
+                bus = dicts.bus[v["gen_bus"]],
             ) for (k, v) in ref[:gen]
         ],
         arc = [
-            (i = k, rate_a = ref[:branch][l]["rate_a"], bus = busdict[i]) for
+            (i = k, rate_a = ref[:branch][l]["rate_a"], bus = dicts.bus[i]) for
             (k, (l, i, j)) in enumerate(ref[:arcs])
                 ],
         branch = [
             begin
-                f_idx = arcdict[i, branch["f_bus"], branch["t_bus"]]
-                t_idx = arcdict[i, branch["t_bus"], branch["f_bus"]]
+                f_idx = dicts.arc[i, branch["f_bus"], branch["t_bus"]]
+                t_idx = dicts.arc[i, branch["t_bus"], branch["f_bus"]]
                 g, b = PowerModels.calc_branch_y(branch)
                 tr, ti = PowerModels.calc_branch_t(branch)
                 ttm = tr^2 + ti^2
@@ -87,12 +88,12 @@ function process_ac_power_data(filename)
                 c7 = (g + g_to)
                 c8 = (b + b_to)
                 (
-                    i = branchdict[i],
+                    i = dicts.branch[i],
                     j = 1,
                     f_idx = f_idx,
                     t_idx = t_idx,
-                    f_bus = busdict[branch["f_bus"]],
-                    t_bus = busdict[branch["t_bus"]],
+                    f_bus = dicts.bus[branch["f_bus"]],
+                    t_bus = dicts.bus[branch["t_bus"]],
                     c1 = c1,
                     c2 = c2,
                     c3 = c3,
@@ -105,7 +106,7 @@ function process_ac_power_data(filename)
                 )
             end for (i, branch) in ref[:branch]
                 ],
-        ref_buses = [busdict[i] for (i, k) in ref[:ref_buses]],
+        ref_buses = [dicts.bus[i] for (i, k) in ref[:ref_buses]],
         vmax = [v["vmax"] for (k, v) in ref[:bus]],
         vmin = [v["vmin"] for (k, v) in ref[:bus]],
         pmax = [v["pmax"] for (k, v) in ref[:gen]],
@@ -120,8 +121,8 @@ function process_ac_power_data(filename)
     @info "Saving JLD2 cache file"
     d, f = splitdir(filename)
     name,ext = splitext(f)
-    JLD2.save(joinpath(TMPDIR, name * ".jld2"), "data", data)
-
-    return data
+    JLD2.save(joinpath(TMPDIR, name * ".jld2"), "data", data, "dicts", dicts)
+    
+    return data, dicts
 end
 

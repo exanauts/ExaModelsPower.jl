@@ -197,6 +197,18 @@ function scopf_model(
         vm[b.i, k] - vm[b.i, 1] for (b, k) in data.idx_bus_cont;
     )
 
-    return ExaModels.ExaModel(core; kwargs...)
+    model =ExaModels.ExaModel(core; kwargs...)
+    
+    vars = (
+        va = va,
+        vm = vm,
+        pg = pg,
+        qg = qg,
+        p = p,        
+        q = q
+    )
+
+    return model, vars
+
 end
 
