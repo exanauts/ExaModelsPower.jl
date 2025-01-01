@@ -17,7 +17,7 @@ function parse_ac_power_data(filename)
         else
             @info "Downloading $filename"
             Downloads.download(
-                "https://raw.githubusercontent.com/power-grid-lib/pglib-opf/raw/master/$filename",
+                "https://raw.githubusercontent.com/power-grid-lib/pglib-opf/master/$filename",
                 joinpath(TMPDIR, name * ".m"),
             )
             joinpath(TMPDIR, name * ".m")
