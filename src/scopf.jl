@@ -1,3 +1,5 @@
+using DelimitedFiles
+
 function parse_sc_power_data(data, contingencies, corrective_action_ratio, backend)
     # Raw data
     nbus = length(data.bus)
@@ -5,6 +7,7 @@ function parse_sc_power_data(data, contingencies, corrective_action_ratio, backe
     narc = length(data.arc)
     # Contingencies
     K = length(contingencies) + 1 # +1 accounts for base case
+    println(ngen)
 
     # Build indexes
     idx_ref = [(r, k) for r in data.ref_buses, k in 1:K]
@@ -25,6 +28,14 @@ function parse_sc_power_data(data, contingencies, corrective_action_ratio, backe
     idx_bus = [(b, k) for b in data.bus, k in 1:K]
     idx_gen = [(b, k) for b in data.gen, k in 1:K]
     idx_arc = [(b, k) for b in data.arc, k in 1:K]
+    idx_gen_cont = map(
+        b -> NamedTuple{(:i, :cost1, :cost2, :cost3, :bus, :pmax, :pmin, :qmin, :qmax)}(
+            (b.i, b.cost1, b.cost2, b.cost3, b.bus, data.pmax[b.i], data.pmin[b.i], data.qmin[b.i], data.qmax[b.i])
+        ),
+        data.gen
+    )
+    qmin_finite_data = filter(g -> isfinite(g.qmin), idx_gen_cont)
+    qmax_finite_data = filter(g -> isfinite(g.qmax), idx_gen_cont)    
 
     # Compute maximum injection in lines
     max_inj = repeat(data.rate_a, K)
@@ -47,7 +58,9 @@ function parse_sc_power_data(data, contingencies, corrective_action_ratio, backe
             idx_arc = idx_arc,
             max_inj = max_inj, 
             Δp = corrective_action_ratio .* (data.pmax .- data.pmin),
-            idx_gen_cont = [(b, k) for b in data.gen, k in 2:K], # discard base case
+            idx_gen_cont = [(g, k) for g in idx_gen_cont, k in 2:K], # discard base case
+            idx_qmin_finite_cont = [(g, k) for g in qmin_finite_data, k in 2:K],
+            idx_qmax_finite_cont = [(g, k) for g in qmax_finite_data, k in 2:K],
             idx_bus_cont = [(b, k) for b in gen_buses, k in 2:K], 
         ),
         backend)
@@ -61,10 +74,13 @@ function parse_sc_power_data(data, contingencies, corrective_action_ratio, backe
 end
 
 function scopf_model(
-    filename;
+    filename,
+    contingencies;
     backend = nothing,
-    data = parse_ac_power_data(filename),
-    contingencies = [b.i for b in data.branch], # full n-1 formulation by default
+    data = parse_ac_power_data(filename), 
+    load_factor =1.0,
+    adjust=:droop,
+    voltage_control=:none,
     corrective_action_ratio = 0.1, 
     T = Float64,
     kwargs...
@@ -73,6 +89,8 @@ function scopf_model(
     data = parse_sc_power_data(data, contingencies, corrective_action_ratio, backend)
     
     core = ExaModels.ExaCore(T; backend = backend)
+
+    alpha = ones(data.ngen)
 
     # Voltage angle and magnitudes
     va = ExaModels.variable(core, 1:data.nbus, 1:data.K; start=zeros(data.nbus, data.K))
@@ -116,6 +134,38 @@ function scopf_model(
         g.cost1 * pg[g.i, 1]^2 + g.cost2 * pg[g.i, 1] + g.cost3 for g in data.gen
     )
 
+    if adjust == :mpecdroop
+        pp = ExaModels.variable(
+            core,
+            1:data.ngen, 2:data.K; # Don't think need counting
+            lvar = 0,
+            uvar = Inf
+        )
+        pn = ExaModels.variable(
+            core,
+            1:data.ngen, 2:data.K; # Don't think need counting
+            lvar = 0,
+            uvar = Inf
+        )
+    end
+
+    if voltage_control == :pvpq
+        vp = ExaModels.variable(
+            core,
+            1:data.ngen, 2:data.K; # Don't think need counting
+            lvar = 0,
+            uvar = Inf
+        )
+        vn = ExaModels.variable(
+            core,
+            1:data.ngen, 2:data.K; # Don't think need counting
+            lvar = 0,
+            uvar = Inf
+        )
+    end
+
+    delta = ExaModels.variable(core, 2:data.K;)
+
     # Constraints
     # Voltage angle at reference buses is 0
     c1 = ExaModels.constraint(core, va[i, k] for (i, k) in data.idx_ref)
@@ -154,13 +204,7 @@ function scopf_model(
         b.c1 * (vm[b.t_bus, k] * vm[b.f_bus, k] * sin(va[b.t_bus, k] - va[b.f_bus, k])) for
         (b, k) in data.idx_branch
     )
-    # Difference of angles
-    c6 = ExaModels.constraint(
-        core,
-        va[b.f_bus, k] - va[b.t_bus, k] for (b, k) in data.idx_branch
-        lcon = repeat(data.angmin, data.K),
-        ucon = repeat(data.angmax, data.K),
-    )
+
     # Line-flow constraints
     # from
     lcon = fill!(similar(data.branch, Float64, data.K * length(data.branch)), -Inf)
@@ -177,26 +221,72 @@ function scopf_model(
     )
 
     # Power flow constraints
-    c9 = ExaModels.constraint(core, b.pd + b.gs * vm[b.i, k]^2 for (b, k) in data.idx_bus)
-    c10 = ExaModels.constraint(core, b.qd - b.bs * vm[b.i, k]^2 for (b, k) in data.idx_bus)
+    c9 = ExaModels.constraint(core, load_factor*b.pd + b.gs * vm[b.i, k]^2 for (b, k) in data.idx_bus)
+    c10 = ExaModels.constraint(core, load_factor*b.qd - b.bs * vm[b.i, k]^2 for (b, k) in data.idx_bus)
     # TODO: shifts of index is hacky.
     c11 = ExaModels.constraint!(core, c9, a.bus + (k-1)*data.nbus => p[a.i, k] for (a, k) in data.idx_arc)
     c12 = ExaModels.constraint!(core, c10, a.bus + (k-1)*data.nbus => q[a.i, k] for (a, k) in data.idx_arc)
     c13 = ExaModels.constraint!(core, c9, g.bus + (k-1)*data.nbus => -pg[g.i, k] for (g, k) in data.idx_gen)
     c14 = ExaModels.constraint!(core, c10, g.bus + (k-1)*data.nbus=> -qg[g.i, k] for (g, k) in data.idx_gen)
 
+    
     # Corrective OPF formulation
-    c_corrective_gen = ExaModels.constraint(
-        core,
-        pg[g.i, k] - pg[g.i, 1] for (g, k) in data.idx_gen_cont;
-        lcon = repeat(-data.Δp, data.K),
-        ucon = repeat(data.Δp, data.K),
-    )
-    c_corrective_vmag = ExaModels.constraint(
-        core,
-        vm[b.i, k] - vm[b.i, 1] for (b, k) in data.idx_bus_cont;
-    )
-
+    if adjust == :droop
+        c_corrective_gen = ExaModels.constraint(
+            core,
+            pg[g.i, k] - pg[g.i, 1] - alpha[g.i]*delta[k] for (g, k) in data.idx_gen_cont; # JuMP use enumerate with a new variable j for alpha here, not sure if this is necessary
+        )
+    elseif adjust == :mpecdroop
+        p_corrective_gen = ExaModels.constraint(
+            core,
+            pp[g.i, k] - pn[g.i, k] - pg[g.i, k] + pg[g.i, 1] + alpha[1]*delta[k] for (g, k) in data.idx_gen_cont; # JuMP use enumerate with a new variable j for alpha here, not sure if this is necessary
+        )
+        ExaModels.constraint(
+            core,
+            pn[g.i, k] * (g.pmax - pg[g.i, k]) for (g,k) in data.idx_gen_cont;
+            lcon = -Inf
+        )
+        ExaModels.constraint(
+            core,
+            pp[g.i, k] * (pg[g.i, k] - g.pmin) for (g,k) in data.idx_gen_cont;
+            lcon = -Inf
+        )
+    elseif adjust == :preventive
+        ExaModels.constraint(
+            core,
+            pg[g.i, k] - pg[g.i, 1] for (g,k) in data.idx_gen_cont;
+        )
+    elseif adjust == :relaxed
+        ExaModels.constraint(
+            core,
+            pg[g.i, k] - pg[g.i, 1] for (g, k) in data.idx_gen_cont;
+            lcon = repeat(-data.Δp, data.K),
+            ucon = repeat(data.Δp, data.K),
+        )
+    end
+    
+    if voltage_control == :pvpq
+        ExaModels.constraint(
+            core,
+            vp[g.i, k] - vn[g.i, k] - (vm[g.bus, k] - vm[g.bus, 1]) for (g, k) in data.idx_gen_cont; # no i need gen bus
+        )
+        ExaModels.constraint(
+            core,
+            vn[g.i , k] * (g.qmax - qg[g.bus, k]) for (g, k) in data.idx_qmax_finite_cont;
+            lcon = -Inf
+        )    
+        ExaModels.constraint(
+            core,
+            vn[g.i, k] * (qg[g.bus, k] - g.qmin) for (g, k) in data.idx_qmin_finite_cont;
+            lcon = -Inf
+        )
+    else
+        ExaModels.constraint(
+            core,
+            vm[g.bus, k] - vm[g.bus, 1] for (g, k) in data.idx_gen_cont
+        )
+    end
+        
     model =ExaModels.ExaModel(core; kwargs...)
     
     vars = (
