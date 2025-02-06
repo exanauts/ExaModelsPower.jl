@@ -1,6 +1,6 @@
 using DelimitedFiles
 
-function parse_mp_power_data(filename, N, corrective_action_ratio, bus, pd, qd, backend)
+function parse_mp_power_data(filename, N, corrective_action_ratio, pd, qd, backend)
 
     data, dicts = parse_ac_power_data(filename)
 
@@ -11,36 +11,37 @@ function parse_mp_power_data(filename, N, corrective_action_ratio, bus, pd, qd, 
     data = (
         ;
         data...,
-        refarray = [(i,t) for t in 1:N for i in data.ref_buses],
-        barray = [(;b..., t = t) for t in 1:N for b in data.branch],
-        busarray = [(;b..., t = t) for t in 1:N for b in data.bus],
-        arcarray = [(;a..., t = t, cindex = (t-1) * nbus + a.bus) for t in 1:N for a in data.arc],
-        genarray = [(;g..., t = t, cindex = (t-1) * nbus + g.bus) for t in 1:N for g in data.gen],
-        idx = [(t1=t, t2=t+1, i = g.i) for t in 1:N-1 for g in data.gen],
+        refarray = [(i,t) for i in data.ref_buses, t in 1:N],
+        barray = [(;b..., t = t) for b in data.branch, t in 1:N ],
+        busarray = [(;b..., t = t) for b in data.bus, t in 1:N ],
+        arcarray = [(;a..., t = t) for a in data.arc, t in 1:N ],
+        genarray = [(;g..., t = t) for g in data.gen, t in 1:N ],
         Δp = corrective_action_ratio .* (data.pmax .- data.pmin)
     )
-
-    busmap = zeros(Int, nbus)
-
-    for j=1:length(busmap)
-        busmap[dicts.bus[Int(bus[j,1])]] = j
-    end
     
-    update_load_data(data.busarray, pd, qd, data.baseMVA[], busmap)
+    update_load_data(data.busarray, pd, qd, data.baseMVA[], dicts.bus)
     
     return convert_data(data,backend)
 end
 
-function update_load_data(busarray, pd, qd, baseMVA, busmap)
-    for (i,b) in enumerate(busarray)
-        busarray[i] = (;b..., pd = pd[busmap[b.i], b.t] / baseMVA, qd = qd[busmap[b.i], b.t] / baseMVA)
+function update_load_data(busarray, pd, qd, baseMVA, busdict)
+    for (idx ,pd_t) in pairs(pd)
+        b = busarray[busdict[idx[1]], idx[2]]
+        busarray[busdict[idx[1]], idx[2]] = (
+                i = b.i,
+                pd = pd_t/ baseMVA, 
+                gs = b.gs,
+                qd = qd[idx[1], idx[2]] / baseMVA,
+                bs = b.bs,
+                bus_type = b.bus_type,
+                t = idx[2]
+                )
     end
 end
 
 
 function mpopf_model(
-    filename, bus_data, active_power_data, reactive_power_data;
-    bus = readdlm(bus_data),
+    filename, active_power_data, reactive_power_data;
     pd = readdlm(active_power_data),
     qd = readdlm(reactive_power_data),
     N = size(pd,2), 
@@ -51,26 +52,26 @@ function mpopf_model(
 )
 
 
-    data = parse_mp_power_data(filename, N, corrective_action_ratio, bus, pd, qd, backend)
+    data = parse_mp_power_data(filename, N, corrective_action_ratio, pd, qd, backend)
     
     core = ExaModels.ExaCore(T; backend = backend)
 
-    va = ExaModels.variable(core, length(data.bus), N;)
+    va = ExaModels.variable(core, size(data.bus, 1), N;)
 
     vm = ExaModels.variable(
         core,
-        length(data.bus), N;
-        start = repeat(fill!(similar(data.bus, Float64), 1.0), outer = (N,1)),
-        lvar = repeat(data.vmin, outer = (N,1)),
-        uvar = repeat(data.vmax, outer = (N,1)),
+        size(data.bus, 1), N;
+        start = ones(size(data.bus)),
+        lvar = repeat(data.vmin, 1, N),
+        uvar = repeat(data.vmax, 1, N),
     )
-    pg = ExaModels.variable(core, length(data.gen), N; lvar = repeat(data.pmin, outer = (N,1)), uvar = repeat(data.pmax, outer = (N,1)))
+    pg = ExaModels.variable(core, size(data.gen, 1), N; lvar = repeat(data.pmin, 1, N), uvar = repeat(data.pmax, 1, N))
 
-    qg = ExaModels.variable(core, length(data.gen), N; lvar = repeat(data.qmin, outer = (N,1)), uvar = repeat(data.qmax, outer = (N,1))) 
+    qg = ExaModels.variable(core, size(data.gen, 1), N; lvar = repeat(data.qmin, 1, N), uvar = repeat(data.qmax, 1, N)) 
 
-    p = ExaModels.variable(core, length(data.arc), N; lvar = repeat(-data.rate_a, outer = (N,1)), uvar = repeat(data.rate_a, outer = (N,1)))
+    p = ExaModels.variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
-    q = ExaModels.variable(core, length(data.arc), N; lvar = repeat(-data.rate_a, outer = (N,1)), uvar = repeat(data.rate_a, outer = (N,1)))
+    q = ExaModels.variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
     
 
@@ -118,35 +119,36 @@ function mpopf_model(
     c6 = ExaModels.constraint(
         core,
         va[b.f_bus, b.t] - va[b.t_bus, b.t] for b in data.barray;
-        lcon = repeat(data.angmin, outer = (N,1)),
-        ucon = repeat(data.angmax, outer = (N,1)),
+        lcon = repeat(data.angmin, 1, N),
+        ucon = repeat(data.angmax, 1, N),
     )
-    c7 = ExaModels.constraint(
+    
+
+    c7 = ExaModels.constraint(core, b.pd + b.gs * vm[b.i, b.t]^2 for b in data.busarray)
+    c8 = ExaModels.constraint(core, b.qd - b.bs * vm[b.i, b.t]^2 for b in data.busarray)
+
+    c7a = ExaModels.constraint!(core, c7, a.bus + N*(a.t-1) => p[a.i, a.t] for a in data.arcarray)
+    c8a = ExaModels.constraint!(core, c8, a.bus + N*(a.t-1) => q[a.i, a.t] for a in data.arcarray)
+
+    c7b = ExaModels.constraint!(core, c7, g.bus + N*(g.t-1) => -pg[g.i, g.t] for g in data.genarray)
+    c8b = ExaModels.constraint!(core, c8, g.bus + N*(g.t-1) => -qg[g.i, g.t] for g in data.genarray)
+
+    c9 = ExaModels.constraint(
         core,
         p[b.f_idx, b.t]^2 + q[b.f_idx, b.t]^2 - b.rate_a_sq for b in data.barray;
-        lcon = repeat(fill!(similar(data.branch, Float64, length(data.branch)), -Inf), outer = (N,1)),
+        lcon = fill(-Inf, size(data.barray))
     )
-    c8 = ExaModels.constraint(
+    c10 = ExaModels.constraint(
         core,
         p[b.t_idx, b.t]^2 + q[b.t_idx, b.t]^2 - b.rate_a_sq for b in data.barray;
-        lcon = repeat(fill!(similar(data.branch, Float64, length(data.branch)), -Inf), outer = (N,1)),
+        lcon = fill(-Inf, size(data.barray))
     )
 
-    c9 = ExaModels.constraint(core, b.pd + b.gs * vm[b.i, b.t]^2 for b in data.busarray)
-    c10 = ExaModels.constraint(core, b.qd - b.bs * vm[b.i, b.t]^2 for b in data.busarray)
-
-    c11 = ExaModels.constraint!(core, c9, a.cindex => p[a.i, a.t] for a in data.arcarray)
-    c12 = ExaModels.constraint!(core, c10, a.cindex => q[a.i, a.t] for a in data.arcarray)
-
-    c13 = ExaModels.constraint!(core, c9, g.cindex => -pg[g.i, g.t] for g in data.genarray)
-    c14 = ExaModels.constraint!(core, c10, g.cindex => -qg[g.i, g.t] for g in data.genarray)
-
-    
-    c15 = ExaModels.constraint(
+    c11 = ExaModels.constraint(
         core,
-        pg[g.i, g.t1] - pg[g.i, g.t2] for g in data.idx;
-        lcon = repeat(-data.Δp, outer = (N,1)),
-        ucon = repeat( data.Δp, outer = (N,1)),
+        pg[g.i, g.t -1] - pg[g.i, g.t] for g in data.genarray[:, 2:N];
+        lcon = repeat(-data.Δp,  1, N-1),
+        ucon = repeat( data.Δp, 1, N-1),
     )
 
     model =ExaModels.ExaModel(core; kwargs...)
