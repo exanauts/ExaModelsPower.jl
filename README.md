@@ -8,7 +8,8 @@ using ExaModelsPower, MadNLP, MadNLPGPU, CUDA
 
 model, vars = opf_model(
     "pglib_opf_case118_ieee.m";
-    backend = CUDABackend()
+    backend = CUDABackend(),
+    symbol = "polar"
 )
 result = madnlp(model; tol=1e-6)
 ```
@@ -31,4 +32,15 @@ model, vars = mpopf_model(
     backend = CUDABackend()
 )
 result = madnlp(model; tol=1e-6)
+
+#Alternatively, input a vector to scale baseline demand to generate a demand curve
+model, vars = mpopf_model(
+    "pglib_opf_case118_ieee.m", # static network data
+    [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 1.0, .99, 1.0, 1.0,
+    .97, .96, .96, .93, .92, .92, .93, .87, .72, .64], #Demand curve
+    backend = CUDABackend(),
+    corrective_action_ratio = 0.3
+)
+result = madnlp(model; tol=1e-6)
+
 ```

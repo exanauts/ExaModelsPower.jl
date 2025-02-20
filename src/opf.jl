@@ -26,7 +26,7 @@ function opf_model(
 
         vim = ExaModels.variable(core, length(data.bus))
     else
-        error("Invalid coordinate system - valid options are 'polar' or 'rect'")
+        error("Invalid coordinate symbol - valid options are 'polar' or 'rect'")
     end
 
     pg = ExaModels.variable(core, length(data.gen); lvar = data.pmin, uvar = data.pmax)
@@ -45,33 +45,37 @@ function opf_model(
     if symbol == "polar"
         c1 = ExaModels.constraint(core, va[i] for i in data.ref_buses)
 
-        for i in collect(1:4)
-            c2to5 = ExaModels.constraint(core, constraint_polar_branch(b,p[b.f_idx], p[b.t_idx],q[b.f_idx],q[b.t_idx],
-            vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus],i) for b in data.branch)
-        end
+
+        c2 = ExaModels.constraint(core, c2_polar(b, p[b.f_idx],
+            vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus]) for b in data.branch)
+
+        c3 = ExaModels.constraint(core, c3_polar(b, q[b.f_idx],
+            vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus]) for b in data.branch)
+
+        c4 = ExaModels.constraint(core, c4_polar(b, p[b.t_idx],
+            vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus]) for b in data.branch)
+
+        c5 = ExaModels.constraint(core, c5_polar(b, q[b.t_idx],
+            vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus]) for b in data.branch)
 
         c6 = ExaModels.constraint(
             core,
-            constraint_polar_branch(b,p[b.f_idx], p[b.t_idx],q[b.f_idx],q[b.t_idx],
-            vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus],5) for b in data.branch;
+            c6_polar(b,va[b.f_bus],va[b.t_bus]) for b in data.branch;
             lcon = data.angmin,
             ucon = data.angmax,
         )
 
-        c7 = ExaModels.constraint(core, constraint_polar_bus(b, vm[b.i], 1) for b in data.bus)
+        c7 = ExaModels.constraint(core, c7_polar(b, vm[b.i]) for b in data.bus)
 
-        c8 = ExaModels.constraint(core, constraint_polar_bus(b, vm[b.i], 2) for b in data.bus)
+        c8 = ExaModels.constraint(core, c8_polar(b, vm[b.i]) for b in data.bus)
 
         c9 = ExaModels.constraint(
-        core, constraint_polar_branch(b,p[b.f_idx], p[b.t_idx],q[b.f_idx],q[b.t_idx],
-        vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus],6)
-         for b in data.branch;
+        core, c9_10(b,p[b.f_idx],q[b.f_idx]) for b in data.branch;
         lcon = fill!(similar(data.branch, Float64, length(data.branch)), -Inf),
         )
 
         c10 = ExaModels.constraint(
-            core, constraint_polar_branch(b,p[b.f_idx], p[b.t_idx],q[b.f_idx],q[b.t_idx],
-            vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus],7)
+            core, c9_10(b,p[b.t_idx],q[b.t_idx])
             for b in data.branch;
             lcon = fill!(similar(data.branch, Float64, length(data.branch)), -Inf),
         )
@@ -79,76 +83,45 @@ function opf_model(
     elseif symbol == "rect"
         c1 = ExaModels.constraint(core, atan(vim[i]/vr[i]) for i in data.ref_buses)
 
-        #=
-        c2 = ExaModels.constraint(
-            core,
-            p[b.f_idx] - b.c5 * (vr[b.f_bus]^2+vim[b.f_bus]^2) -
-            b.c3 * (vr[b.f_bus]*vr[b.t_bus] + vim[b.f_bus]*vim[b.t_bus]) -
-            b.c4 * (vim[b.f_bus]*vr[b.t_bus] - vr[b.f_bus]*vim[b.t_bus]) for
-            b in data.branch
-        )
-
-        c3 = ExaModels.constraint(
-            core,
-            q[b.f_idx] +
-            b.c6 * (vr[b.f_bus]^2+vim[b.f_bus]^2) +
-            b.c4 * (vr[b.f_bus]*vr[b.t_bus] + vim[b.f_bus]*vim[b.t_bus]) -
-            b.c3 * (vim[b.f_bus]*vr[b.t_bus] - vr[b.f_bus]*vim[b.t_bus]) for
-            b in data.branch
-        )
-
-        c4 = ExaModels.constraint(
-            core,
-            p[b.t_idx] - b.c7 * (vr[b.t_bus]^2+vim[b.t_bus]^2) -
-            b.c1 * (vr[b.f_bus]*vr[b.t_bus] + vim[b.f_bus]*vim[b.t_bus]) -
-            b.c2 * (vim[b.t_bus]*vr[b.f_bus] - vr[b.t_bus]*vim[b.f_bus]) for
-            b in data.branch
-        )
-
-        c5 = ExaModels.constraint(
-            core,
-            q[b.t_idx] +
-            b.c8 * (vr[b.t_bus]^2+vim[b.t_bus]^2) +
-            b.c2 * (vr[b.f_bus]*vr[b.t_bus] + vim[b.f_bus]*vim[b.t_bus]) -
-            b.c1 * (vim[b.t_bus]*vr[b.f_bus] - vr[b.t_bus]*vim[b.f_bus]) for
-            b in data.branch
-        )=#
-
         
-        for i = collect(1:4)
-            c2to5 = ExaModels.constraint(core, constraint_rect_branch(b,p[b.f_idx], p[b.t_idx],q[b.f_idx],q[b.t_idx],
-            vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus],i) for b in data.branch)
-        end
+        c2 = ExaModels.constraint(core, c2_rect(b,p[b.f_idx],
+            vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus]) for b in data.branch)
+
+        c3 = ExaModels.constraint(core, c3_rect(b,q[b.f_idx],
+            vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus]) for b in data.branch)
+
+        c4 = ExaModels.constraint(core, c4_rect(b,p[b.t_idx],
+            vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus]) for b in data.branch)
         
+        c5 = ExaModels.constraint(core, c5_rect(b,q[b.t_idx],
+            vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus]) for b in data.branch)
 
         c6 = ExaModels.constraint(
-            core,constraint_rect_branch(b,p[b.f_idx], p[b.t_idx],q[b.f_idx],q[b.t_idx],
-            vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus],5)
+            core,c6_rect(b,
+            vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus])
             for b in data.branch;
             lcon = data.angmin,
             ucon = data.angmax,
         )
 
-        c7 = ExaModels.constraint(core, constraint_rect_bus(b, vr[b.i], vim[b.i], 1) for b in data.bus)
+        c7 = ExaModels.constraint(core, c7_rect(b, vr[b.i], vim[b.i]) for b in data.bus)
 
-        c8 = ExaModels.constraint(core, constraint_rect_bus(b, vr[b.i], vim[b.i], 2) for b in data.bus)
+        c8 = ExaModels.constraint(core, c8_rect(b, vr[b.i], vim[b.i]) for b in data.bus)
 
         c9 = ExaModels.constraint(
-        core, constraint_rect_branch(b,p[b.f_idx], p[b.t_idx],q[b.f_idx],q[b.t_idx],
-        vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus],6)
+        core, c9_10(b,p[b.f_idx], q[b.f_idx])
          for b in data.branch;
         lcon = fill!(similar(data.branch, Float64, length(data.branch)), -Inf),
         )
 
         c10 = ExaModels.constraint(
-            core, constraint_rect_branch(b,p[b.f_idx], p[b.t_idx],q[b.f_idx],q[b.t_idx],
-            vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus],7)
+            core, c9_10(b,p[b.t_idx], q[b.t_idx])
             for b in data.branch;
             lcon = fill!(similar(data.branch, Float64, length(data.branch)), -Inf),
         )
 
         c11 = ExaModels.constraint(
-            core, constraint_rect_bus(b, vr[b.i], vim[b.i], 3)
+            core, c11_rect(vr[b.i], vim[b.i])
              for b in data.bus; 
             lcon = data.vmin.^2, 
             ucon = data.vmax.^2
