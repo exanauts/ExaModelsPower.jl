@@ -1,3 +1,5 @@
+#functions to define constraints in opf
+
 function c2_polar(b, p_f, vm_f, vm_t, va_f, va_t)
     return p_f - b.c5 * vm_f^2 -
     b.c3 * (vm_f * vm_t * cos(va_f - va_t)) -
