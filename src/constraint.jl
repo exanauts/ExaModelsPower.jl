@@ -1,3 +1,11 @@
+function obj(g, pg)
+    return g.cost1 * pg^2 + g.cost2 * pg + g.cost3 
+end
+
+function c1_polar(va)
+    return va
+end
+
 function c2_polar(b, p_f, vm_f, vm_t, va_f, va_t)
     return p_f - b.c5 * vm_f^2 -
     b.c3 * (vm_f * vm_t * cos(va_f - va_t)) -
@@ -41,7 +49,16 @@ function c9_10(b, p,q)
     return p^2 + q^2 - b.rate_a_sq
 end
 
+#only for mp
+function c_12(pg0, pg1)
+    return pg0 - pg1
+end
+
 #rectangular constraints
+function c1_rect(vr, vim)
+    return atan(vim/vr)
+end
+
 function c2_rect(b, p_f, vr_f, vr_t, vim_f, vim_t)
     return p_f - b.c5 * (vr_f^2+vim_f^2) -
     b.c3 * (vr_f*vr_t + vim_f*vim_t) -
