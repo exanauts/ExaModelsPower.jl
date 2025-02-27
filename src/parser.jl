@@ -34,7 +34,6 @@ function process_ac_power_data(filename)
 
     ref = PowerModels.build_ref(data)[:it][:pm][:nw][0]
 
-
     dicts = (
         arc = Dict(a => k for (k, a) in enumerate(ref[:arcs])),
         bus = Dict(k => i for (i, (k, v)) in enumerate(ref[:bus])),
@@ -106,7 +105,7 @@ function process_ac_power_data(filename)
                 )
             end for (i, branch) in ref[:branch]
                 ],
-        storage = [
+        storage = isempty(ref[:storage]) ? [NamedTuple()] : [
             begin
                 (c = i, 
                 Einit = stor["energy"],
@@ -130,10 +129,10 @@ function process_ac_power_data(filename)
         rate_a = [ref[:branch][l]["rate_a"] for (k, (l, i, j)) in enumerate(ref[:arcs])],
         angmax = [b["angmax"] for (i, b) in ref[:branch]],
         angmin = [b["angmin"] for (i, b) in ref[:branch]],
-        pdmax = [s["charge_rating"] for (i, s) in ref[:storage]],
-        pcmax = [s["discharge_rating"] for (i, s) in ref[:storage]],
-        srating = [s["thermal_rating"] for (i, s) in ref[:storage]],
-        emax = [s["energy_rating"] for (i, s) in ref[:storage]],
+        pdmax = isempty(ref[:storage]) ? [NamedTuple()] : [s["charge_rating"] for (i, s) in ref[:storage]],
+        pcmax = isempty(ref[:storage]) ? [NamedTuple()] : [s["discharge_rating"] for (i, s) in ref[:storage]],
+        srating = isempty(ref[:storage]) ? [NamedTuple()] : [s["thermal_rating"] for (i, s) in ref[:storage]],
+        emax = isempty(ref[:storage]) ? [NamedTuple()] : [s["energy_rating"] for (i, s) in ref[:storage]],
     )
 
     @info "Saving JLD2 cache file"

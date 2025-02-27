@@ -1,3 +1,11 @@
+function obj(g, pg)
+    return g.cost1 * pg^2 + g.cost2 * pg + g.cost3 
+end
+
+function c1_polar(va)
+    return va
+end
+
 function c2_polar(b, p_f, vm_f, vm_t, va_f, va_t)
     return p_f - b.c5 * vm_f^2 -
     b.c3 * (vm_f * vm_t * cos(va_f - va_t)) -
@@ -42,6 +50,10 @@ function c9_10(b, p,q)
 end
 
 #rectangular constraints
+function c1_rect(vr, vim)
+    return atan(vim/vr)
+end
+
 function c2_rect(b, p_f, vr_f, vr_t, vim_f, vim_t)
     return p_f - b.c5 * (vr_f^2+vim_f^2) -
     b.c3 * (vr_f*vr_t + vim_f*vim_t) -
@@ -82,4 +94,54 @@ end
 
 function c11_rect(vr, vim)
     return vr^2 + vim^2
+end
+
+#only for mp
+function c_12(pg0, pg1)
+    return pg0 - pg1
+end
+
+#storage constraints
+function c_13(s, pst, pstd, pstc, I2)
+    return pst + pstd - pstc - s.Pexts - s.Zr*I2
+end
+
+function c13_smooth(s, pst, pstd, I2)
+    return pst + pstd - s.Pexts - s.Zr*I2
+end
+
+function c_14(s, qst, qint, I2)
+    return qst - qint - s.Qexts - s.Zim*I2
+end
+
+function c15_polar(pst, qst, vm, I2)
+    return pst^2 + qst^2 - (vm^2)*I2
+end
+
+function c15_rect(pst, qst, vr, vim, I2)
+    return pst^2 + qst^2 - (vr^2 + vim^2)*I2
+end
+
+function c16_17(s, E0, E1, pstc, pstd)
+    return E0 - E1 - (s.etac*pstc - pstd/s.etad)
+end
+
+function c16_17_smooth(s, E0, E1, discharge_func::Function, pstd)
+    return E0 - E1 + discharge_func(pstd, s.Srating)
+end
+
+function c_18(s, pst, qst)
+    return pst^2 + qst^2 - s.Srating^2
+end
+
+function c_19(pstd, pstc)
+    return pstd - pstc
+end
+
+function c19_smooth(pstd)
+    return pstd
+end
+
+function c_20(pstd, pstc)
+    return pstd*pstc
 end
