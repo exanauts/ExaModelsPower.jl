@@ -2,7 +2,7 @@ module ExaModelsPower
 
 import JLD2
 import Downloads
-import ExaModels
+import ExaModels: ExaCore, variable, constraint, ExaModel, objective, constraint!, convert_array
 import PowerModels
 
 include("parser.jl")

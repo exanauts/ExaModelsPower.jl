@@ -1,9 +1,8 @@
 function build_polar_opf(data; backend = nothing, T=Float64, kwargs...)
-    core = ExaModels.ExaCore(T; backend = backend)
+    core = ExaCore(T; backend = backend)
 
-    va = ExaModels.variable(core, length(data.bus);)
-
-    vm = ExaModels.variable(
+    va = variable(core, length(data.bus);)
+    vm = variable(
             core,
             length(data.bus);
             start = fill!(similar(data.bus, Float64), 1.0),
@@ -11,59 +10,58 @@ function build_polar_opf(data; backend = nothing, T=Float64, kwargs...)
             uvar = data.vmax,
         )
 
-    pg = ExaModels.variable(core, length(data.gen); lvar = data.pmin, uvar = data.pmax)
+    pg = variable(core, length(data.gen); lvar = data.pmin, uvar = data.pmax)
+    qg = variable(core, length(data.gen); lvar = data.qmin, uvar = data.qmax)
 
-    qg = ExaModels.variable(core, length(data.gen); lvar = data.qmin, uvar = data.qmax)
+    p = variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
+    q = variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
 
-    p = ExaModels.variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
+    o = objective(
+        core, gen_cost(g, pg[g.i]) for g in data.gen)
 
-    q = ExaModels.variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
+    c_ref_angle = constraint(core, c_ref_angle_polar(va[i]) for i in data.ref_buses)
 
-    o = ExaModels.objective(
-        core, obj(g, pg[g.i]) for g in data.gen)
-    c1 = ExaModels.constraint(core, c1_polar(va[i]) for i in data.ref_buses)
-
-    c2 = ExaModels.constraint(core, c2_polar(b, p[b.f_idx],
+    c_to_active_power_flow = constraint(core, c_to_active_power_flow_polar(b, p[b.f_idx],
         vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus]) for b in data.branch)
 
-    c3 = ExaModels.constraint(core, c3_polar(b, q[b.f_idx],
+    c_to_reactive_power_flow = constraint(core, c_to_reactive_power_flow_polar(b, q[b.f_idx],
         vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus]) for b in data.branch)
 
-    c4 = ExaModels.constraint(core, c4_polar(b, p[b.t_idx],
+    c_from_active_power_flow = constraint(core, c_from_active_power_flow_polar(b, p[b.t_idx],
         vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus]) for b in data.branch)
 
-    c5 = ExaModels.constraint(core, c5_polar(b, q[b.t_idx],
+    c_from_reactive_power_flow = constraint(core, c_from_reactive_power_flow_polar(b, q[b.t_idx],
         vm[b.f_bus],vm[b.t_bus],va[b.f_bus],va[b.t_bus]) for b in data.branch)
 
-    c6 = ExaModels.constraint(
+    c_phase_angle_diff = constraint(
         core,
-        c6_polar(b,va[b.f_bus],va[b.t_bus]) for b in data.branch;
+        c_phase_angle_diff_polar(b,va[b.f_bus],va[b.t_bus]) for b in data.branch;
         lcon = data.angmin,
         ucon = data.angmax,
     )
 
-    c7 = ExaModels.constraint(core, c7_polar(b, vm[b.i]) for b in data.bus)
+    c_active_power_balance = constraint(core, c_active_power_balance_demand_polar(b, vm[b.i]) for b in data.bus)
 
-    c8 = ExaModels.constraint(core, c8_polar(b, vm[b.i]) for b in data.bus)
+    c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_polar(b, vm[b.i]) for b in data.bus)
 
-    c7a = ExaModels.constraint!(core, c7, a.bus => p[a.i] for a in data.arc)
-    c8a = ExaModels.constraint!(core, c8, a.bus => q[a.i] for a in data.arc)
+    c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus => p[a.i] for a in data.arc)
+    c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus => q[a.i] for a in data.arc)
 
-    c7b = ExaModels.constraint!(core, c7, g.bus => -pg[g.i] for g in data.gen)
-    c8b = ExaModels.constraint!(core, c8, g.bus => -qg[g.i] for g in data.gen)
+    c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus => -pg[g.i] for g in data.gen)
+    c_active_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus => -qg[g.i] for g in data.gen)
 
-    c9 = ExaModels.constraint(
-        core, c9_10(b,p[b.f_idx],q[b.f_idx]) for b in data.branch;
+    c_from_thermal_limit = constraint(
+        core, c_thermal_limit(b,p[b.f_idx],q[b.f_idx]) for b in data.branch;
         lcon = fill!(similar(data.branch, Float64, length(data.branch)), -Inf),
         )
 
-    c10 = ExaModels.constraint(
-        core, c9_10(b,p[b.t_idx],q[b.t_idx])
+    c_to_thermal_limit = constraint(
+        core, c_thermal_limit(b,p[b.t_idx],q[b.t_idx])
         for b in data.branch;
         lcon = fill!(similar(data.branch, Float64, length(data.branch)), -Inf),
     )
 
-    model =ExaModels.ExaModel(core; kwargs...)
+    model =ExaModel(core; kwargs...)
     
     vars = (
             va = va,
@@ -74,77 +72,87 @@ function build_polar_opf(data; backend = nothing, T=Float64, kwargs...)
             q = q
         )
 
-    return model, vars
+    cons = (
+        c_ref_angle = c_ref_angle,
+        c_to_active_power_flow = c_to_active_power_flow,
+        c_to_reactive_power_flow = c_to_reactive_power_flow,
+        c_from_active_power_flow = c_from_active_power_flow,
+        c_from_reactive_power_flow = c_from_reactive_power_flow,
+        c_phase_angle_diff = c_phase_angle_diff,
+        c_active_power_balance = c_active_power_balance,
+        c_reactive_power_balance = c_reactive_power_balance,
+        c_from_thermal_limit = c_from_thermal_limit,
+        c_to_thermal_limit = c_to_thermal_limit
+    )
+
+    return model, vars, cons
 end
 
 function build_rect_opf(data; backend = nothing, T=Float64, kwargs...)
-    core = ExaModels.ExaCore(T; backend = backend)
+    core = ExaCore(T; backend = backend)
 
-    vr = ExaModels.variable(core, length(data.bus), start = fill!(similar(data.bus, Float64), 1.0))
+    vr = variable(core, length(data.bus), start = fill!(similar(data.bus, Float64), 1.0))
+    vim = variable(core, length(data.bus))
 
-    vim = ExaModels.variable(core, length(data.bus))
+    pg = variable(core, length(data.gen); lvar = data.pmin, uvar = data.pmax)
+    qg = variable(core, length(data.gen); lvar = data.qmin, uvar = data.qmax)
 
-    pg = ExaModels.variable(core, length(data.gen); lvar = data.pmin, uvar = data.pmax)
+    p = variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
+    q = variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
 
-    qg = ExaModels.variable(core, length(data.gen); lvar = data.qmin, uvar = data.qmax)
+    o = objective(
+        core, gen_cost(g, pg[g.i]) for g in data.gen)
 
-    p = ExaModels.variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
+    c_ref_angle = constraint(core, c_ref_angle_rect(vr[i], vim[i]) for i in data.ref_buses)
 
-    q = ExaModels.variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
-
-    o = ExaModels.objective(
-        core, obj(g, pg[g.i]) for g in data.gen)
-
-    c1 = ExaModels.constraint(core, c1_rect(vr[i], vim[i]) for i in data.ref_buses)
-
-    c2 = ExaModels.constraint(core, c2_rect(b,p[b.f_idx],
+    c_to_active_power_flow = constraint(core, c_to_active_power_flow_rect(b,p[b.f_idx],
         vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus]) for b in data.branch)
 
-    c3 = ExaModels.constraint(core, c3_rect(b,q[b.f_idx],
+    c_to_reactive_power_flow = constraint(core, c_to_reactive_power_flow_rect(b,q[b.f_idx],
         vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus]) for b in data.branch)
 
-    c4 = ExaModels.constraint(core, c4_rect(b,p[b.t_idx],
+    c_from_active_power_flow = constraint(core, c_from_active_power_flow_rect(b,p[b.t_idx],
         vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus]) for b in data.branch)
     
-    c5 = ExaModels.constraint(core, c5_rect(b,q[b.t_idx],
+    c_from_reactive_power_flow = constraint(core, c_from_reactive_power_flow_rect(b,q[b.t_idx],
         vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus]) for b in data.branch)
 
-    c6 = ExaModels.constraint(
-        core, c6_rect(b,
+    c_phase_angle_diff = constraint(
+        core, c_phase_angle_diff_rect(b,
         vr[b.f_bus],vr[b.t_bus],vim[b.f_bus],vim[b.t_bus])
         for b in data.branch;
         lcon = data.angmin,
         ucon = data.angmax,
     )
 
-    c7 = ExaModels.constraint(core, c7_rect(b, vr[b.i], vim[b.i]) for b in data.bus)
+    c_active_power_balance = constraint(core, c_active_power_balance_demand_rect(b, vr[b.i], vim[b.i]) for b in data.bus)
 
-    c8 = ExaModels.constraint(core, c8_rect(b, vr[b.i], vim[b.i]) for b in data.bus)
+    c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_rect(b, vr[b.i], vim[b.i]) for b in data.bus)
 
-    c7a = ExaModels.constraint!(core, c7, a.bus => p[a.i] for a in data.arc)
-    c8a = ExaModels.constraint!(core, c8, a.bus => q[a.i] for a in data.arc)
+    c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus => p[a.i] for a in data.arc)
+    c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus => q[a.i] for a in data.arc)
 
-    c7b = ExaModels.constraint!(core, c7, g.bus => -pg[g.i] for g in data.gen)
-    c8b = ExaModels.constraint!(core, c8, g.bus => -qg[g.i] for g in data.gen)
+    c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus => -pg[g.i] for g in data.gen)
+    c_reactive_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus => -qg[g.i] for g in data.gen)
 
-    c9 = ExaModels.constraint(
-        core, c9_10(b,p[b.f_idx], q[b.f_idx]) for b in data.branch;
+    c_from_thermal_limit = constraint(
+        core, c_thermal_limit(b,p[b.f_idx], q[b.f_idx]) for b in data.branch;
         lcon = fill!(similar(data.branch, Float64, length(data.branch)), -Inf),
     )
 
-    c10 = ExaModels.constraint(
-        core, c9_10(b,p[b.t_idx], q[b.t_idx])
+    c_to_thermal_limit = constraint(
+        core, c_thermal_limit(b,p[b.t_idx], q[b.t_idx])
         for b in data.branch;
         lcon = fill!(similar(data.branch, Float64, length(data.branch)), -Inf),
     )
 
-    c11 = ExaModels.constraint(
-        core, c11_rect(vr[b.i], vim[b.i]) for b in data.bus; 
+    c_voltage_magnitude = constraint(
+        core, c_voltage_magnitude_rect(vr[b.i], vim[b.i]) for b in data.bus; 
         lcon = data.vmin.^2, 
         ucon = data.vmax.^2
     ) 
     
-    model =ExaModels.ExaModel(core; kwargs...)
+    model = ExaModel(core; kwargs...)
     
     vars = (
         vr = vr,
@@ -155,25 +163,39 @@ function build_rect_opf(data; backend = nothing, T=Float64, kwargs...)
         q = q
     )
 
-    return model, vars
+    cons = (
+        c_ref_angle = c_ref_angle,
+        c_to_active_power_flow = c_to_active_power_flow,
+        c_to_reactive_power_flow = c_to_reactive_power_flow,
+        c_from_active_power_flow = c_from_active_power_flow,
+        c_from_reactive_power_flow = c_from_reactive_power_flow,
+        c_phase_angle_diff = c_phase_angle_diff,
+        c_active_power_balance = c_active_power_balance,
+        c_reactive_power_balance = c_reactive_power_balance,
+        c_from_thermal_limit = c_from_thermal_limit,
+        c_to_thermal_limit = c_to_thermal_limit,
+        c_voltage_magnitude = c_voltage_magnitude
+    )
+
+    return model, vars, cons
 end
 
 function opf_model(
     filename;
     backend = nothing,
     T = Float64,
-    symbol = "polar",
+    form = :polar,
     kwargs...,
 )
 
     data, _ = parse_ac_power_data(filename)
     data = convert_data(data, backend)
 
-    if symbol == "polar"
+    if form == :polar
         return build_polar_opf(data, backend = backend, T=T, kwargs...)
-    elseif symbol == "rect"
+    elseif form == :rect
         return build_rect_opf(data, backend = backend, T=T, kwargs...)
     else
-        error("Invalid coordinate symbol - valid options are 'polar' or 'rect'")
+        error("Invalid coordinate symbol - valid options are :polar or :rect")
     end
 end

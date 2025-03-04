@@ -1,5 +1,5 @@
 convert_data(data::N, backend) where {names,N<:NamedTuple{names}} =
-    NamedTuple{names}(ExaModels.convert_array(d, backend) for d in data)
+    NamedTuple{names}(convert_array(d, backend) for d in data)
 
 function parse_ac_power_data(filename)
     d, f = splitdir(filename)
