@@ -72,8 +72,7 @@ result = madnlp(model; tol=1e-6)
 
 
 #Modified datasets that can be used for testing
-#https://github.com/mit-shin-group/opf/tree/main/data
-
+#https://github.com/mit-shin-group/multi-period-opf-data
 ```
 
 
