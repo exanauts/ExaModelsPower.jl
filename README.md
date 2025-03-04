@@ -48,9 +48,9 @@ result = madnlp(model; tol=1e-6)
 ### Multi-period optimal power flow with storage
 ```julia
 model, vars = smpopf_model(
-    "pglib_opf_case118_ieee_mod.m", # static network data with storage parameters
-    "/home/sshin/git/ExaModels_Multiperiod/data/case118_onehour_168.Pd", # dynamic load data
-    "/home/sshin/git/ExaModels_Multiperiod/data/case118_onehour_168.Qd"; # dynamic load data
+    "pglib_opf_case30_ieee_mod.m", # static network data with storage parameters
+    "/home/sshin/git/ExaModels_Multiperiod/data/halfhour_30.Pd", # dynamic load data
+    "/home/sshin/git/ExaModels_Multiperiod/data/halfhour_30.Qd"; # dynamic load data
     backend = CUDABackend()
 )
 result = madnlp(model; tol=1e-6)
@@ -61,7 +61,7 @@ function example_func(d, srating)
 end
 
 model, vars = mpopf_model(
-    "pglib_opf_case118_ieee.m", # static network data
+    "pglib_opf_case30_ieee.m", # static network data
     [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 1.0, .99, 1.0, 1.0,
     .97, .96, .96, .93, .92, .92, .93, .87, .72, .64], #Demand curve
     example_function, #Discharge/charge efficiency modeled along smooth curve
@@ -69,6 +69,10 @@ model, vars = mpopf_model(
     corrective_action_ratio = 0.3
 )
 result = madnlp(model; tol=1e-6)
+
+
+#Modified datasets that can be used for testing
+#https://github.com/mit-shin-group/opf/tree/main/data
 
 ```
 
