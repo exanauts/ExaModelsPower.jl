@@ -105,7 +105,7 @@ function process_ac_power_data(filename)
                 )
             end for (i, branch) in ref[:branch]
                 ],
-        storage = isempty(ref[:storage]) ? [NamedTuple()] : [
+        storage = isempty(ref[:storage]) ?  empty_data = Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [
             begin
                 (c = i, 
                 Einit = stor["energy"],
@@ -129,10 +129,10 @@ function process_ac_power_data(filename)
         rate_a = [ref[:branch][l]["rate_a"] for (k, (l, i, j)) in enumerate(ref[:arcs])],
         angmax = [b["angmax"] for (i, b) in ref[:branch]],
         angmin = [b["angmin"] for (i, b) in ref[:branch]],
-        pdmax = isempty(ref[:storage]) ? [NamedTuple()] : [s["charge_rating"] for (i, s) in ref[:storage]],
-        pcmax = isempty(ref[:storage]) ? [NamedTuple()] : [s["discharge_rating"] for (i, s) in ref[:storage]],
-        srating = isempty(ref[:storage]) ? [NamedTuple()] : [s["thermal_rating"] for (i, s) in ref[:storage]],
-        emax = isempty(ref[:storage]) ? [NamedTuple()] : [s["energy_rating"] for (i, s) in ref[:storage]],
+        pdmax = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["charge_rating"] for (i, s) in ref[:storage]],
+        pcmax = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["discharge_rating"] for (i, s) in ref[:storage]],
+        srating = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["thermal_rating"] for (i, s) in ref[:storage]],
+        emax = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["energy_rating"] for (i, s) in ref[:storage]],
     )
 
     @info "Saving JLD2 cache file"

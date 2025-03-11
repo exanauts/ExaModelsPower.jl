@@ -9,6 +9,8 @@ function parse_smp_power_data(filename, N, corrective_action_ratio, backend, cur
 
     @assert length(curve) > 0
 
+    empty_stor = Vector{NamedTuple{(:c, :Einit, :etac, :etad, :Srating, :Zr, :Zim, :Pexts, :Qexts, :bus, :t), Tuple{Int64, Float32, Float32, Float32, Float32, Float32, Float32, Float32, Float32, Int64, Int64}}}()
+
     data = (
         ;
         data...,
@@ -17,9 +19,10 @@ function parse_smp_power_data(filename, N, corrective_action_ratio, backend, cur
         busarray = [(;b..., t = t) for b in data.bus, t in 1:N ],
         arcarray = [(;a..., t = t) for a in data.arc, t in 1:N ],
         genarray = [(;g..., t = t) for g in data.gen, t in 1:N ],
-        storarray = [(;s..., t = t) for s in data.storage, t in 1:N ],
+        storarray = isempty(data.storage) ? empty_data =  empty_stor : [(;s..., t = t) for s in data.storage, t in 1:N],
         Δp = corrective_action_ratio .* (data.pmax .- data.pmin)
     )
+    
     
     update_load_data(data.busarray, curve)
     return convert_data(data,backend)
