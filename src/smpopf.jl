@@ -1,13 +1,10 @@
 using DelimitedFiles
 
-#Curve as input
-function parse_smp_power_data(filename, N, corrective_action_ratio, backend, curve)
+function parse_mp_power_data(filename, N, corrective_action_ratio)
 
     data, dicts = parse_ac_power_data(filename)
 
     nbus = length(data.bus)
-
-    @assert length(curve) > 0
 
     empty_stor = Vector{NamedTuple{(:c, :Einit, :etac, :etad, :Srating, :Zr, :Zim, :Pexts, :Qexts, :bus, :t), Tuple{Int64, Float32, Float32, Float32, Float32, Float32, Float32, Float32, Float32, Int64, Int64}}}()
 
@@ -23,38 +20,45 @@ function parse_smp_power_data(filename, N, corrective_action_ratio, backend, cur
         Δp = corrective_action_ratio .* (data.pmax .- data.pmin)
     )
     
-    
-    update_load_data(data.busarray, curve)
-    return convert_data(data,backend)
+    return data, dicts
 end
 
-#Pd, Qd as inputs
-function parse_smp_power_data(filename, N, corrective_action_ratio, pd, qd, backend)
+#Curve as input
+function update_load_data(busarray, curve)
 
-    data, dicts = parse_ac_power_data(filename)
-
-    nbus = length(data.bus)
-
-    @assert nbus == size(pd, 1)
-
-    data = (
-        ;
-        data...,
-        refarray = [(i,t) for i in data.ref_buses, t in 1:N],
-        barray = [(;b..., t = t) for b in data.branch, t in 1:N ],
-        busarray = [(;b..., t = t) for b in data.bus, t in 1:N ],
-        arcarray = [(;a..., t = t) for a in data.arc, t in 1:N ],
-        genarray = [(;g..., t = t) for g in data.gen, t in 1:N ],
-        storarray = [(;s..., t = t) for s in data.storage, t in 1:N ],
-        Δp = corrective_action_ratio .* (data.pmax .- data.pmin)
-    )
-    
-    update_load_data(data.busarray, pd, qd, data.baseMVA[], dicts.bus)
-
-    return convert_data(data, backend)
+    for t in eachindex(curve)
+        for x in 1:size(busarray, 1)
+            b = busarray[x, t]
+            busarray[x, t] = (
+                i = b.i,
+                pd = b.pd*curve[t], 
+                gs = b.gs,
+                qd = b.qd*curve[t],
+                bs = b.bs,
+                bus_type = b.bus_type,
+                t = t
+                )
+        end
+    end
 end
 
-function build_base_polar_smpopf(core, data, N, Nbus)
+#Pd, Qd as input
+function update_load_data(busarray, pd, qd, baseMVA, busdict)
+    for (idx ,pd_t) in pairs(pd)
+        b = busarray[busdict[idx[1]], idx[2]]
+        busarray[busdict[idx[1]], idx[2]] = (
+                i = b.i,
+                pd = pd_t/ baseMVA, 
+                gs = b.gs,
+                qd = qd[idx[1], idx[2]] / baseMVA,
+                bs = b.bs,
+                bus_type = b.bus_type,
+                t = idx[2]
+                )
+    end
+end
+
+function build_base_polar_mpopf(core, data, N, Nbus)
     va = variable(core, Nbus, N;)
     vm = variable(
         core,
@@ -170,7 +174,7 @@ function build_base_polar_smpopf(core, data, N, Nbus)
     return vars, cons
 end
 
-function build_base_rect_smpopf(core, data, N, Nbus)
+function build_base_rect_mpopf(core, data, N, Nbus)
     vr = variable(core, Nbus, N; start = ones(size(data.busarray)))
     vim = variable(core, Nbus, N;)
 
@@ -292,10 +296,10 @@ end
 
 
 #cc is whether to include complimentary constraint
-function build_polar_smpopf(data, Nbus, N; backend = nothing, T = Float64, cc = false, kwargs...)
+function build_polar_mpopf(data, Nbus, N; backend = nothing, T = Float64, cc = false, kwargs...)
     core = ExaCore(T; backend = backend)
 
-    vars, cons = build_base_polar_smpopf(core, data, N, Nbus)
+    vars, cons = build_base_polar_mpopf(core, data, N, Nbus)
 
     va, vm, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
 
@@ -358,10 +362,10 @@ function build_polar_smpopf(data, Nbus, N; backend = nothing, T = Float64, cc = 
     return model, vars, cons
 end
 
-function build_rect_smpopf(data, Nbus, N; backend = nothing, T = Float64, cc = false, kwargs...)
+function build_rect_mpopf(data, Nbus, N; backend = nothing, T = Float64, cc = false, kwargs...)
     core = ExaCore(T; backend = backend)
 
-    vars, cons = build_base_rect_smpopf(core, data, N, Nbus)
+    vars, cons = build_base_rect_mpopf(core, data, N, Nbus)
 
     vr, vim, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
 
@@ -423,10 +427,10 @@ function build_rect_smpopf(data, Nbus, N; backend = nothing, T = Float64, cc = f
     return model, vars, cons
 end
 
-function build_polar_smpopf(data, Nbus, N, discharge_func::Function; backend = nothing, T = Float64, kwargs...)
+function build_polar_mpopf(data, Nbus, N, discharge_func::Function; backend = nothing, T = Float64, kwargs...)
     core = ExaCore(T; backend = backend)
 
-    vars, cons = build_base_polar_smpopf(core, data, N, Nbus)
+    vars, cons = build_base_polar_mpopf(core, data, N, Nbus)
 
     va, vm, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
 
@@ -481,11 +485,11 @@ function build_polar_smpopf(data, Nbus, N, discharge_func::Function; backend = n
     return model, vars, cons
 end
 
-function build_rect_smpopf(data, Nbus, N, discharge_func::Function; backend = nothing, T = Float64, kwargs...)
+function build_rect_mpopf(data, Nbus, N, discharge_func::Function; backend = nothing, T = Float64, kwargs...)
 
     core = ExaCore(T; backend = backend)
 
-    vars, cons = build_base_rect_smpopf(core, data, N, Nbus)
+    vars, cons = build_base_rect_mpopf(core, data, N, Nbus)
 
     vr, vim, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
 
@@ -542,7 +546,7 @@ function build_rect_smpopf(data, Nbus, N, discharge_func::Function; backend = no
     return model, vars, cons
 end
 
-function smpopf_model(
+function mpopf_model(
     filename, curve;
     N = length(curve),
     corrective_action_ratio = 0.1,
@@ -552,19 +556,23 @@ function smpopf_model(
     cc = false,
     kwargs...,
 )
-    data = parse_smp_power_data(filename, N, corrective_action_ratio, backend, curve)
+
+    @assert length(curve) > 0
+    data, dicts = parse_mp_power_data(filename, N, corrective_action_ratio)
+    update_load_data(data.busarray, curve)
+    data = convert_data(data,backend)
     Nbus = size(data.bus, 1)
 
     if form == :polar
-        return build_polar_smpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
+        return build_polar_mpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
     elseif form == :rect
-        return build_rect_smpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
+        return build_rect_mpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
     else
         error("Invalid coordinate symbol - valid options are :polar or :rect")
     end
 end
 
-function smpopf_model(
+function mpopf_model(
     filename, active_power_data, reactive_power_data;
     pd = readdlm(active_power_data),
     qd = readdlm(reactive_power_data),
@@ -576,20 +584,24 @@ function smpopf_model(
     cc = false,
     kwargs...,
 )
-    data = parse_smp_power_data(filename, N, corrective_action_ratio, pd, qd, backend)
+    
+    data, dicts = parse_mp_power_data(filename, N, corrective_action_ratio)
+    update_load_data(data.busarray, pd, qd, data.baseMVA[], dicts.bus)
+    data = convert_data(data,backend)
     Nbus = size(data.bus, 1)
+    @assert Nbus == size(pd, 1)
 
     if form == :polar
-        return build_polar_smpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
+        return build_polar_mpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
     elseif form == :rect
-        return build_rect_smpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
+        return build_rect_mpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
     else
         error("Invalid coordinate symbol - valid options are :polar or :rect")
     end
 end
 
 #Input to discharge_func should be discharge rate (or negative charge), output should be loss in battery level
-function smpopf_model(
+function mpopf_model(
     filename, curve, discharge_func::Function;
     N = length(curve),
     corrective_action_ratio = 0.1,
@@ -599,19 +611,22 @@ function smpopf_model(
     kwargs...,
 )
 
-    data = parse_smp_power_data(filename, N, corrective_action_ratio, backend, curve)
+    @assert length(curve) > 0
+    data, dicts = parse_mp_power_data(filename, N, corrective_action_ratio)
+    update_load_data(data.busarray, curve)
+    data = convert_data(data,backend)
     Nbus = size(data.bus, 1)
 
     if form == :polar
-        return build_polar_smpopf(data, Nbus, N, discharge_func, backend = backend, T = T, kwargs...)
+        return build_polar_mpopf(data, Nbus, N, discharge_func, backend = backend, T = T, kwargs...)
     elseif form == :rect
-        return build_rect_smpopf(data, Nbus, N, discharge_func, backend = backend, T = T, kwargs...)
+        return build_rect_mpopf(data, Nbus, N, discharge_func, backend = backend, T = T, kwargs...)
     else
         error("Invalid coordinate symbol - valid options are :polar or :rect")
     end
 end
 
-function smpopf_model(
+function mpopf_model(
     filename, active_power_data, reactive_power_data, discharge_func::Function;
     pd = readdlm(active_power_data),
     qd = readdlm(reactive_power_data),
@@ -623,13 +638,18 @@ function smpopf_model(
     cc = false,
     kwargs...,
 )
-    data = parse_smp_power_data(filename, N, corrective_action_ratio, pd, qd, backend)
+    
+    
+    data, dicts = parse_mp_power_data(filename, N, corrective_action_ratio)
+    update_load_data(data.busarray, pd, qd, data.baseMVA[], dicts.bus)
+    data = convert_data(data,backend)
     Nbus = size(data.bus, 1)
+    @assert Nbus == size(pd, 1)
 
     if form == :polar
-        return build_polar_smpopf(data, Nbus, N, discharge_func, backend = backend, T = T, kwargs...)
+        return build_polar_mpopf(data, Nbus, N, discharge_func, backend = backend, T = T, kwargs...)
     elseif form == :rect
-        return build_rect_smpopf(data, Nbus, N, discharge_func, backend = backend, T = T, kwargs...)
+        return build_rect_mpopf(data, Nbus, N, discharge_func, backend = backend, T = T, kwargs...)
     else
         error("Invalid coordinate symbol - valid options are :polar or :rect")
     end

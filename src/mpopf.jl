@@ -1,5 +1,5 @@
 using DelimitedFiles
-
+#=
 #Curve as input
 function parse_mp_power_data(filename, N, corrective_action_ratio, backend, curve)
 
@@ -194,7 +194,7 @@ function build_rect_mpopf(data, Nbus, N; backend = nothing, T = Float64, kwargs.
 
     o = objective(
         core,
-        gen_cost(g, pg[g.i]) for g in data.genarray
+        gen_cost(g, pg[g.i, g.t]) for g in data.genarray
     )
 
     c_ref_angle = constraint(core, c_ref_angle_rect(vr[i, t], vim[i,t]) for (i, t) in data.refarray)
@@ -329,4 +329,4 @@ function mpopf_model(
     else
         error("Invalid coordinate symbol - valid options are :polar or :rect")
     end
-end
+end=#

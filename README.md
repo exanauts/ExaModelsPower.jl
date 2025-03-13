@@ -60,11 +60,11 @@ function example_func(d, srating)
     return d + .2/srating*d^2
 end
 
-model, vars = mpopf_model(
-    "pglib_opf_case30_ieee.m", # static network data
+model, vars = smpopf_model(
+    "pglib_opf_case30_ieee_mod.m", # static network data
     [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 1.0, .99, 1.0, 1.0,
     .97, .96, .96, .93, .92, .92, .93, .87, .72, .64], #Demand curve
-    example_function, #Discharge/charge efficiency modeled along smooth curve
+    example_func, #Discharge/charge efficiency modeled along smooth curve
     backend = CUDABackend(),
     corrective_action_ratio = 0.3
 )
