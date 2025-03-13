@@ -10,7 +10,6 @@ include("opf.jl")
 include("scopf.jl")
 include("mpopf.jl")
 include("constraint.jl")
-include("smpopf.jl")
 
 const NAMES = filter(names(@__MODULE__; all = true)) do x
     str = string(x)

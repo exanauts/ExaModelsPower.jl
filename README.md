@@ -43,11 +43,8 @@ model, vars = mpopf_model(
 )
 result = madnlp(model; tol=1e-6)
 
-```
-
-### Multi-period optimal power flow with storage
-```julia
-model, vars = smpopf_model(
+#mpopf_model can also handle inputs with storage constraints
+model, vars = mpopf_model(
     "pglib_opf_case30_ieee_mod.m", # static network data with storage parameters
     "/home/sshin/git/ExaModels_Multiperiod/data/halfhour_30.Pd", # dynamic load data
     "/home/sshin/git/ExaModels_Multiperiod/data/halfhour_30.Qd"; # dynamic load data
@@ -55,18 +52,17 @@ model, vars = smpopf_model(
 )
 result = madnlp(model; tol=1e-6)
 
-#Alternatively, provide a smooth function for the charge/discharge efficiency to remove complementarity constraint (also has demand curve functionality input as in mpopf)
+#Alternatively, provide a smooth function for the charge/discharge efficiency to remove complementarity constraint
 function example_func(d, srating)
     return d + .2/srating*d^2
 end
 
-model, vars = smpopf_model(
+model, vars = mpopf_model(
     "pglib_opf_case30_ieee_mod.m", # static network data
-    [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 1.0, .99, 1.0, 1.0,
-    .97, .96, .96, .93, .92, .92, .93, .87, .72, .64], #Demand curve
+    "/home/sshin/git/ExaModels_Multiperiod/data/halfhour_30.Pd", # dynamic load data
+    "/home/sshin/git/ExaModels_Multiperiod/data/halfhour_30.Qd"; # dynamic load data
     example_func, #Discharge/charge efficiency modeled along smooth curve
-    backend = CUDABackend(),
-    corrective_action_ratio = 0.3
+    backend = CUDABackend()
 )
 result = madnlp(model; tol=1e-6)
 
@@ -74,6 +70,7 @@ result = madnlp(model; tol=1e-6)
 #Modified datasets that can be used for testing
 #https://github.com/mit-shin-group/multi-period-opf-data
 ```
+
 
 
 
