@@ -60,6 +60,7 @@ end
 
 #If no storage contraints, the "build_base_xxx_mpopf" returns the final version of the mpopf
 function build_base_polar_mpopf(core, data, N, Nbus)
+    #voltage angle, voltage magnitude
     va = variable(core, Nbus, N;)
     vm = variable(
         core,
@@ -69,23 +70,30 @@ function build_base_polar_mpopf(core, data, N, Nbus)
         uvar = repeat(data.vmax, 1, N),
     )
 
+    #active, reactive power generated
     pg = variable(core, size(data.gen, 1), N; lvar = repeat(data.pmin, 1, N), uvar = repeat(data.pmax, 1, N))
     qg = variable(core, size(data.gen, 1), N; lvar = repeat(data.qmin, 1, N), uvar = repeat(data.qmax, 1, N)) 
 
+    #active, reactive power at each arc
     p = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
     q = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
     #Storage specific variables
+    #charge or discharge from battery to grid
     pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
     pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
+    #active/reactive power from bus into storage
     pst = variable(core, size(data.storage, 1), N)
     qst = variable(core, size(data.storage, 1), N)
 
+    #current magnitude squared
     I2 = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)))
 
+    #ability of converter to control generation/absorption of reactive power
     qint = variable(core, size(data.storage, 1), N; lvar = -repeat(data.srating, 1, N), uvar = repeat(data.srating, 1, N))
 
+    #energy/ state of charge
     E = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.emax, 1, N))
 
     o = objective(core, gen_cost(g, pg[g.i,g.t]) for g in data.genarray)
@@ -176,28 +184,35 @@ function build_base_polar_mpopf(core, data, N, Nbus)
 end
 
 function build_base_rect_mpopf(core, data, N, Nbus)
+    #real, imaginary voltage
     vr = variable(core, Nbus, N; start = ones(size(data.busarray)))
     vim = variable(core, Nbus, N;)
 
+    #active, reactive power generated
     pg = variable(core, size(data.gen, 1), N; lvar = repeat(data.pmin, 1, N), uvar = repeat(data.pmax, 1, N))
     qg = variable(core, size(data.gen, 1), N; lvar = repeat(data.qmin, 1, N), uvar = repeat(data.qmax, 1, N)) 
 
+    #active, reactive power at each arc
     p = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
     q = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
     #Storage specific variables
+    #charge or discharge from battery to grid
     pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
     pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
+    #active/reactive power from bus into storage
     pst = variable(core, size(data.storage, 1), N)
     qst = variable(core, size(data.storage, 1), N)
 
+    #current magnitude squared
     I2 = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)))
 
+    #ability of converter to control generation/absorption of reactive power
     qint = variable(core, size(data.storage, 1), N; lvar = -repeat(data.srating, 1, N), uvar = repeat(data.srating, 1, N))
 
+    #energy/ state of charge
     E = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.emax, 1, N))
-
 
     o = objective(core, gen_cost(g, pg[g.i,g.t]) for g in data.genarray)
 
@@ -296,8 +311,8 @@ end
 
 
 
-#cc is whether to include complimentary constraint
-function build_polar_mpopf(data, Nbus, N; backend = nothing, T = Float64, cc = false, kwargs...)
+
+function build_polar_mpopf(data, Nbus, N; backend = nothing, T = Float64, storage_complementarity_constraint = false, kwargs...)
     core = ExaCore(T; backend = backend)
 
     vars, cons = build_base_polar_mpopf(core, data, N, Nbus)
@@ -332,7 +347,7 @@ function build_polar_mpopf(data, Nbus, N; backend = nothing, T = Float64, cc = f
     c_discharge_thermal_limit = constraint(core, c_discharge_lim(pstd[s.c, s.t], pstc[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
 
     #Complimentarity constraint
-    if cc
+    if storage_complementarity_constraint
         c_complementarity = constraint(core, c_comp(pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray)
     end
     
@@ -363,7 +378,7 @@ function build_polar_mpopf(data, Nbus, N; backend = nothing, T = Float64, cc = f
     return model, vars, cons
 end
 
-function build_rect_mpopf(data, Nbus, N; backend = nothing, T = Float64, cc = false, kwargs...)
+function build_rect_mpopf(data, Nbus, N; backend = nothing, T = Float64, storage_complementarity_constraint = false, kwargs...)
     core = ExaCore(T; backend = backend)
 
     vars, cons = build_base_rect_mpopf(core, data, N, Nbus)
@@ -399,7 +414,7 @@ function build_rect_mpopf(data, Nbus, N; backend = nothing, T = Float64, cc = fa
     c_discharge_thermal_limit = constraint(core, c_discharge_lim(pstd[s.c, s.t], pstc[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
 
     #Complimentarity constraint
-    if cc
+    if storage_complementarity_constraint
         c_complementarity = constraint(core, c_comp(pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray)
     end
 
@@ -556,7 +571,7 @@ function mpopf_model(
     backend = nothing,
     form = :polar,
     T = Float64,
-    cc = false,
+    storage_complementarity_constraint = false,
     kwargs...,
 )
 
@@ -567,9 +582,9 @@ function mpopf_model(
     Nbus = size(data.bus, 1)
 
     if form == :polar
-        return build_polar_mpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
+        return build_polar_mpopf(data, Nbus, N, backend = backend, T = T, storage_complementarity_constraint = storage_complementarity_constraint, kwargs...)
     elseif form == :rect
-        return build_rect_mpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
+        return build_rect_mpopf(data, Nbus, N, backend = backend, T = T, storage_complementarity_constraint = storage_complementarity_constraint, kwargs...)
     else
         error("Invalid coordinate symbol - valid options are :polar or :rect")
     end
@@ -584,7 +599,7 @@ function mpopf_model(
     backend = nothing,
     form = :polar,
     T = Float64,
-    cc = false,
+    storage_complementarity_constraint = false,
     kwargs...,
 )
     
@@ -595,9 +610,9 @@ function mpopf_model(
     @assert Nbus == size(pd, 1)
 
     if form == :polar
-        return build_polar_mpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
+        return build_polar_mpopf(data, Nbus, N, backend = backend, T = T, storage_complementarity_constraint = storage_complementarity_constraint, kwargs...)
     elseif form == :rect
-        return build_rect_mpopf(data, Nbus, N, backend = backend, T = T, cc = cc, kwargs...)
+        return build_rect_mpopf(data, Nbus, N, backend = backend, T = T, storage_complementarity_constraint = storage_complementarity_constraint, kwargs...)
     else
         error("Invalid coordinate symbol - valid options are :polar or :rect")
     end
@@ -638,7 +653,7 @@ function mpopf_model(
     backend = nothing,
     form = :polar,
     T = Float64,
-    cc = false,
+    storage_complementarity_constraint = false,
     kwargs...,
 )
     
