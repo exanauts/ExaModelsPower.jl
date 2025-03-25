@@ -34,7 +34,6 @@ function process_ac_power_data(filename)
 
     ref = PowerModels.build_ref(data)[:it][:pm][:nw][0]
 
-
     dicts = (
         arc = Dict(a => k for (k, a) in enumerate(ref[:arcs])),
         bus = Dict(k => i for (i, (k, v)) in enumerate(ref[:bus])),
@@ -106,6 +105,20 @@ function process_ac_power_data(filename)
                 )
             end for (i, branch) in ref[:branch]
                 ],
+        storage = isempty(ref[:storage]) ?  empty_data = Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [
+            begin
+                (c = i, 
+                Einit = stor["energy"],
+                etac = stor["charge_efficiency"],
+                etad = stor["discharge_efficiency"],
+                Srating = stor["thermal_rating"],
+                Zr = stor["r"],
+                Zim = stor["x"],
+                Pexts = stor["ps"],
+                Qexts = stor["qs"],
+                bus = dicts.bus[stor["storage_bus"]])
+            end for (i, stor) in ref[:storage]
+        ],
         ref_buses = [dicts.bus[i] for (i, k) in ref[:ref_buses]],
         vmax = [v["vmax"] for (k, v) in ref[:bus]],
         vmin = [v["vmin"] for (k, v) in ref[:bus]],
@@ -116,6 +129,10 @@ function process_ac_power_data(filename)
         rate_a = [ref[:branch][l]["rate_a"] for (k, (l, i, j)) in enumerate(ref[:arcs])],
         angmax = [b["angmax"] for (i, b) in ref[:branch]],
         angmin = [b["angmin"] for (i, b) in ref[:branch]],
+        pdmax = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["charge_rating"] for (i, s) in ref[:storage]],
+        pcmax = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["discharge_rating"] for (i, s) in ref[:storage]],
+        srating = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["thermal_rating"] for (i, s) in ref[:storage]],
+        emax = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["energy_rating"] for (i, s) in ref[:storage]],
     )
 
     @info "Saving JLD2 cache file"

@@ -100,3 +100,51 @@ end
 function c_voltage_magnitude_rect(vr, vim)
     return vr^2 + vim^2
 end
+
+#storage constraints
+
+#Formulation from Geth, Carleton (2020)
+function c_active_stor_power(s, pst, pstd, pstc, I2)
+    return pst + pstd - pstc - s.Pexts - s.Zr*I2
+end
+
+function c_active_storage_power_smooth(s, pst, pstd, I2)
+    return pst + pstd - s.Pexts - s.Zr*I2
+end
+
+function c_reactive_stor_power(s, qst, qint, I2)
+    return qst - qint - s.Qexts - s.Zim*I2
+end
+
+function c_ohms_polar(pst, qst, vm, I2)
+    return pst^2 + qst^2 - (vm^2)*I2
+end
+
+function c_ohms_rect(pst, qst, vr, vim, I2)
+    return pst^2 + qst^2 - (vr^2 + vim^2)*I2
+end
+
+function c_stor_state(s, E0, E1, pstc, pstd)
+    return E0 - E1 - (s.etac*pstc - pstd/s.etad)
+end
+
+function c_storage_state_smooth(s, E0, E1, discharge_func::Function, pstd)
+    return E0 - E1 + discharge_func(pstd, s.Srating)
+end
+
+function c_transfer_lim(s, pst, qst)
+    return pst^2 + qst^2 - s.Srating^2
+end
+
+#used for charge and discharge limits
+function c_discharge_lim(pstd, pstc)
+    return pstd - pstc
+end
+
+function c_discharge_limit_smooth(pstd)
+    return pstd
+end
+
+function c_comp(pstd, pstc)
+    return pstd*pstc
+end
