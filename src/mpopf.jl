@@ -79,9 +79,6 @@ function build_base_polar_mpopf(core, data, N, Nbus)
     q = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
     #Storage specific variables
-    #charge or discharge from battery to grid
-    pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
-    pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
     #active/reactive power from bus into storage
     pst = variable(core, size(data.storage, 1), N)
@@ -171,8 +168,6 @@ function build_base_polar_mpopf(core, data, N, Nbus)
             qg = qg,
             p = p,        
             q = q, 
-            pstc = pstc,
-            pstd = pstd, 
             pst = pst,
             qst = qst,
             I2 = I2,
@@ -197,9 +192,6 @@ function build_base_rect_mpopf(core, data, N, Nbus)
     q = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
     #Storage specific variables
-    #charge or discharge from battery to grid
-    pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
-    pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
     #active/reactive power from bus into storage
     pst = variable(core, size(data.storage, 1), N)
@@ -282,8 +274,6 @@ function build_base_rect_mpopf(core, data, N, Nbus)
             qg = qg,
             p = p,
             q = q,
-            pstc = pstc,
-            pstd = pstd, 
             pst = pst,
             qst = qst,
             I2 = I2,
@@ -317,7 +307,7 @@ function build_polar_mpopf(data, Nbus, N; backend = nothing, T = Float64, storag
 
     vars, cons = build_base_polar_mpopf(core, data, N, Nbus)
 
-    va, vm, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
+    va, vm, pg, qg, p, q, pst, qst, I2, qint, E = vars
 
     (c_ref_angle, 
     c_to_active_power_flow, 
@@ -330,6 +320,10 @@ function build_polar_mpopf(data, Nbus, N; backend = nothing, T = Float64, storag
     c_from_thermal_limit,
     c_to_thermal_limit,
     c_ramp_rate) = cons
+
+    #charge or discharge from battery to grid
+    pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
+    pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
     #adding storage constraints
     c_active_storage_power = constraint(core, c_active_stor_power(s, pst[s.c, s.t], pstd[s.c, s.t], pstc[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
@@ -373,6 +367,7 @@ function build_polar_mpopf(data, Nbus, N; backend = nothing, T = Float64, storag
         c_discharge_thermal_limit = c_discharge_thermal_limit
     )
 
+    vars = va, vm, pg, qg, p, q, pst, qst, I2, qint, E, pstd, pstc
     
     model = ExaModel(core; kwargs...)
     return model, vars, cons
@@ -383,7 +378,7 @@ function build_rect_mpopf(data, Nbus, N; backend = nothing, T = Float64, storage
 
     vars, cons = build_base_rect_mpopf(core, data, N, Nbus)
 
-    vr, vim, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
+    vr, vim, pg, qg, p, q, pst, qst, I2, qint, E = vars
 
     (c_ref_angle, 
     c_to_active_power_flow, 
@@ -397,6 +392,10 @@ function build_rect_mpopf(data, Nbus, N; backend = nothing, T = Float64, storage
     c_to_thermal_limit,
     c_voltage_magnitude,
     c_ramp_rate) = cons
+
+    #charge or discharge from battery to grid
+    pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
+    pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
     
     #adding storage constraints
     c_active_storage_power = constraint(core, c_active_stor_power(s, pst[s.c, s.t], pstd[s.c, s.t], pstc[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
@@ -439,6 +438,7 @@ function build_rect_mpopf(data, Nbus, N; backend = nothing, T = Float64, storage
         c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
         c_discharge_thermal_limit = c_discharge_thermal_limit
     )
+    vars = vr, vim, pg, qg, p, q, pst, qst, I2, qint, E, pstc, pstd
 
     model = ExaModel(core; kwargs...)
     return model, vars, cons
@@ -450,7 +450,7 @@ function build_polar_mpopf(data, Nbus, N, discharge_func::Function; backend = no
 
     vars, cons = build_base_polar_mpopf(core, data, N, Nbus)
 
-    va, vm, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
+    va, vm, pg, qg, p, q, pst, qst, I2, qint, E = vars
 
     (c_ref_angle, 
     c_to_active_power_flow, 
@@ -463,6 +463,9 @@ function build_polar_mpopf(data, Nbus, N, discharge_func::Function; backend = no
     c_from_thermal_limit,
     c_to_thermal_limit,
     c_ramp_rate) = cons
+
+    #discharge or charge from battery to grid (positive or negative)
+    pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
     c_active_storage_power = constraint(core, c_active_storage_power_smooth(s, pst[s.c, s.t], pstd[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
@@ -499,6 +502,8 @@ function build_polar_mpopf(data, Nbus, N, discharge_func::Function; backend = no
         c_discharge_thermal_limit = c_discharge_thermal_limit
     )
 
+    vars = va, vm, pg, qg, p, q, pst, qst, I2, qint, E, pstd
+
     model = ExaModel(core; kwargs...)
     return model, vars, cons
 end
@@ -509,7 +514,7 @@ function build_rect_mpopf(data, Nbus, N, discharge_func::Function; backend = not
 
     vars, cons = build_base_rect_mpopf(core, data, N, Nbus)
 
-    vr, vim, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
+    vr, vim, pg, qg, p, q, pst, qst, I2, qint, E = vars
 
     (c_ref_angle, 
     c_to_active_power_flow, 
@@ -524,6 +529,10 @@ function build_rect_mpopf(data, Nbus, N, discharge_func::Function; backend = not
     c_voltage_magnitude,
     c_ramp_rate) = cons
 
+
+    #discharge or charge from battery to grid (can be positive or negative)
+    pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
+    
     c_active_storage_power = constraint(core, c_active_storage_power_smooth(s, pst[s.c, s.t], pstd[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
     c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
@@ -559,6 +568,8 @@ function build_rect_mpopf(data, Nbus, N, discharge_func::Function; backend = not
         c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
         c_discharge_thermal_limit = c_discharge_thermal_limit
     )
+
+    vars = vr, vim, pg, qg, p, q, pst, qst, I2, qint, E, pstd
 
     model = ExaModel(core; kwargs...)
     return model, vars, cons
