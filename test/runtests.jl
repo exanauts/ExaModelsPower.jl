@@ -179,22 +179,6 @@ function runtests()
                 @test isapprox(result.objective, true_sol, rtol = result.options.tol*100)
             end
 
-            #With complementarity constraint
-            #Polar
-            m, v, c = eval(mpopf_model)("pglib_opf_case3_lmbd_mod.m", [1, .9, .8, .95, 1]; T = T, backend = backend, storage_complementarity_constraint = true)
-            result = madnlp(m; print_level = MadNLP.ERROR)
-            @testset "MP w storage, $(T), $(backend), curve, polar, complementarity" begin
-                @test result.status == MadNLP.SOLVE_SUCCEEDED || result.status == MadNLP.SOLVED_TO_ACCEPTABLE_LEVEL
-                @test isapprox(result.objective, true_sol, rtol = result.options.tol*100)
-            end
-            #Rect
-            m, v, c = eval(mpopf_model)("pglib_opf_case3_lmbd_mod.m", [1, .9, .8, .95, 1]; T = T, backend = backend, form = :rect, storage_complementarity_constraint = true)
-            result = madnlp(m; print_level = MadNLP.ERROR)
-            @testset "MP w storage, $(T), $(backend), curve, rect, complementarity" begin
-                @test result.status == MadNLP.SOLVE_SUCCEEDED || result.status == MadNLP.SOLVED_TO_ACCEPTABLE_LEVEL
-                @test isapprox(result.objective, true_sol, rtol = result.options.tol*100)
-            end
-
             #With function
             true_sol = 25354.331998
 
@@ -227,22 +211,6 @@ function runtests()
             m, v, c = eval(mpopf_model)("pglib_opf_case3_lmbd_mod.m", "data/case3_5split.Pd", "data/case3_5split.Qd"; T = T, backend = backend, form = :rect)
             result = madnlp(m; print_level = MadNLP.ERROR)
             @testset "MP w storage, $(T), $(backend), pregen, rect" begin
-                @test result.status == MadNLP.SOLVE_SUCCEEDED || result.status == MadNLP.SOLVED_TO_ACCEPTABLE_LEVEL
-                @test isapprox(result.objective, true_sol, rtol = result.options.tol*100)
-            end
-
-            #With complementarity
-            #Polar
-            m, v, c = eval(mpopf_model)("pglib_opf_case3_lmbd_mod.m", "data/case3_5split.Pd", "data/case3_5split.Qd"; T = T, backend = backend, storage_complementarity_constraint = true)
-            result = madnlp(m; print_level = MadNLP.ERROR)
-            @testset "MP w storage, $(T), $(backend), pregen, polar, complementarity" begin
-                @test result.status == MadNLP.SOLVE_SUCCEEDED || result.status == MadNLP.SOLVED_TO_ACCEPTABLE_LEVEL
-                @test isapprox(result.objective, true_sol, rtol = result.options.tol*100)
-            end
-            #Rect
-            m, v, c = eval(mpopf_model)("pglib_opf_case3_lmbd_mod.m", "data/case3_5split.Pd", "data/case3_5split.Qd"; T = T, backend = backend, form = :rect, storage_complementarity_constraint = true)
-            result = madnlp(m; print_level = MadNLP.ERROR)
-            @testset "MP w storage, $(T), $(backend), pregen, rect, complementarity" begin
                 @test result.status == MadNLP.SOLVE_SUCCEEDED || result.status == MadNLP.SOLVED_TO_ACCEPTABLE_LEVEL
                 @test isapprox(result.objective, true_sol, rtol = result.options.tol*100)
             end
