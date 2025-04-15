@@ -1,3 +1,5 @@
+using Pkg
+Pkg.add(["Ipopt", "JuMP", "ExaModels", "NLPModelsJuMP"])
 using Test, ExaModelsPower, MadNLP, MadNLPGPU, KernelAbstractions, CUDA, PowerModels, Ipopt, JuMP, ExaModels, NLPModelsJuMP
 
 include("opf_tests.jl")
