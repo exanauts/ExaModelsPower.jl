@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - sanjayjo
+  push_request:
+    branches:
+      - sanjayjo
 
 jobs:
   test:
