@@ -39,12 +39,12 @@ true_sol_case5_curve_stor = 68782.0125
 true_sol_case5_curve_stor_func = 70235.91846
 true_sol_case5_pregen_stor = 79640.08493
 true_sol_case5_pregen_stor_func = 79630.14036
-mp_test_cases = [("../data/pglib_opf_case3_lmbd.m", "case3", "data/case3_5split.Pd", "data/case3_5split.Qd", true_sol_case3_curve, true_sol_case3_pregen),
-                 ("../data/pglib_opf_case5_pjm.m", "case5", "data/case5_5split.Pd", "data/case5_5split.Qd", true_sol_case5_curve, true_sol_case5_pregen)]
+mp_test_cases = [("../data/pglib_opf_case3_lmbd.m", "case3", "../data/case3_5split.Pd", "../data/case3_5split.Qd", true_sol_case3_curve, true_sol_case3_pregen),
+                 ("../data/pglib_opf_case5_pjm.m", "case5", "../data/case5_5split.Pd", "../data/case5_5split.Qd", true_sol_case5_curve, true_sol_case5_pregen)]
 
-mp_stor_test_cases = [("../data/pglib_opf_case3_lmbd_mod.m", "case3", "data/case3_5split.Pd", "data/case3_5split.Qd",
+mp_stor_test_cases = [("../data/pglib_opf_case3_lmbd_mod.m", "case3", "../data/case3_5split.Pd", "../data/case3_5split.Qd",
                         true_sol_case3_curve_stor, true_sol_case3_curve_stor_func, true_sol_case3_pregen_stor, true_sol_case3_pregen_stor_func),
-                        ("../data/pglib_opf_case5_pjm_mod.m", "case5", "data/case5_5split.Pd", "data/case5_5split.Qd",
+                        ("../data/pglib_opf_case5_pjm_mod.m", "case5", "../data/case5_5split.Pd", "../data/case5_5split.Qd",
                         true_sol_case5_curve_stor, true_sol_case5_curve_stor_func, true_sol_case5_pregen_stor, true_sol_case5_pregen_stor_func)]
 
 function example_func(d, srating)
