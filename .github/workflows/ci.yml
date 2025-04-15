@@ -4,10 +4,6 @@ on:
   pull_request:
     branches:
       - main
-      - sanjayjo
-  push:
-    branches:
-      - sanjayjo
 
 jobs:
   test:
