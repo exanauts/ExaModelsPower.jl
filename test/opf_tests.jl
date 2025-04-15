@@ -51,11 +51,11 @@ function test_float32(m, m64, result, backend)
     x2 = x1 .* (1 .+ 0.01 .* (2 .* rand(size(x1)) .- 1))
     x3 = x1 .* (1 .+ 0.01 .* (2 .* rand(size(x1)) .- 1))
     for x in [x1, x2, x3]
-        @test isapprox(NLPModelsJuMP.obj(m, x), obj(m64, x), rtol = tol)
-        @test isapprox(NLPModelsJuMP.cons(m, x), cons(m64, x), rtol = tol)
+        @test isapprox(NLPModelsJuMP.obj(m, x), NLPModelsJuMP.obj(m64, x), rtol = tol)
+        @test isapprox(NLPModelsJuMP.cons(m, x), NLPModelsJuMP.cons(m64, x), rtol = tol)
         if backend != CUDABackend()
-            @test isapprox(NLPModelsJuMP.grad(m, x), grad(m64, x), rtol = tol)
-            @test isapprox(NLPModelsJuMP.jac(m, x), jac(m64, x), rtol = tol)
+            @test isapprox(NLPModelsJuMP.grad(m, x), NLPModelsJuMP.grad(m64, x), rtol = tol)
+            @test isapprox(NLPModelsJuMP.jac(m, x), NLPModelsJuMP.jac(m64, x), rtol = tol)
         end
     end
 end
