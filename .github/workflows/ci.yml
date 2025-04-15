@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - sanjayjo
-  push_request:
+  push:
     branches:
       - sanjayjo
 
