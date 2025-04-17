@@ -122,7 +122,7 @@ function runtests()
                     result = madnlp(m; print_level = MadNLP.ERROR)
                     @testset "$(case), MP, $(T), $(backend), curve, $(form_str)" begin
                         if T == Float32
-                            m64, v64, c64 = eval(mpopf_model)(filename, [1, .9, .8, .95, 1]; T=Float64, backend = backend)
+                            m64, v64, c64 = eval(mpopf_model)(filename, [1, .9, .8, .95, 1]; T=Float64, backend = backend, form = symbol)
                             result = madnlp(m64; print_level = MadNLP.ERROR)
                             test_float32(m, m64, result, backend)
                         else
@@ -134,7 +134,7 @@ function runtests()
                     result = madnlp(m; print_level = MadNLP.ERROR)
                     @testset "$(case), MP, $(T), $(backend), curve, $(form_str), func" begin
                         if T == Float32
-                            m64, v64, c64 = eval(mpopf_model)(filename, [1, .9, .8, .95, 1], example_func; T=Float64, backend = backend)
+                            m64, v64, c64 = eval(mpopf_model)(filename, [1, .9, .8, .95, 1], example_func; T=Float64, backend = backend, form = symbol)
                             result = madnlp(m64; print_level = MadNLP.ERROR)
                             test_float32(m, m64, result, backend)
                         else
@@ -148,7 +148,7 @@ function runtests()
                     result = madnlp(m; print_level = MadNLP.ERROR)
                     @testset "$(case), MP, $(T), $(backend), pregen, $(form_str)" begin
                         if T == Float32
-                            m64, v64, c64 = eval(mpopf_model)(filename, Pd_pregen, Qd_pregen; T=Float64, backend = backend)
+                            m64, v64, c64 = eval(mpopf_model)(filename, Pd_pregen, Qd_pregen; T=Float64, backend = backend, form = symbol)
                             result = madnlp(m64; print_level = MadNLP.ERROR)
                             test_float32(m, m64, result, backend)
                         else
@@ -160,7 +160,7 @@ function runtests()
                     result = madnlp(m; print_level = MadNLP.ERROR)
                     @testset "$(case), MP, $(T), $(backend), pregen, $(form_str), func" begin
                         if T == Float32
-                            m64, v64, c64 = eval(mpopf_model)(filename, Pd_pregen, Qd_pregen, example_func; T=Float64, backend = backend)
+                            m64, v64, c64 = eval(mpopf_model)(filename, Pd_pregen, Qd_pregen, example_func; T=Float64, backend = backend, form = symbol)
                             result = madnlp(m64; print_level = MadNLP.ERROR)
                             test_float32(m, m64, result, backend)
                         else
@@ -177,7 +177,7 @@ function runtests()
                     result = madnlp(m; print_level = MadNLP.ERROR)
                     @testset "MP w storage, $(case), $(T), $(backend), curve, $(form_str)" begin
                         if T == Float32
-                            m64, v64, c64 = eval(mpopf_model)(filename, [1, .9, .8, .95, 1]; T=Float64, backend = backend)
+                            m64, v64, c64 = eval(mpopf_model)(filename, [1, .9, .8, .95, 1]; T=Float64, backend = backend, form = symbol)
                             result = madnlp(m64; print_level = MadNLP.ERROR)
                             test_float32(m, m64, result, backend)
                         else
@@ -190,7 +190,7 @@ function runtests()
                     result = madnlp(m; print_level = MadNLP.ERROR)
                     @testset "MP w storage, $(case), $(T), $(backend), curve, $(form_str), func" begin
                         if T == Float32
-                            m64, v64, c64 = eval(mpopf_model)(filename, [1, .9, .8, .95, 1], example_func; T=Float64, backend = backend)
+                            m64, v64, c64 = eval(mpopf_model)(filename, [1, .9, .8, .95, 1], example_func; T=Float64, backend = backend, form = symbol)
                             result = madnlp(m64; print_level = MadNLP.ERROR)
                             test_float32(m, m64, result, backend)
                         else
@@ -203,7 +203,7 @@ function runtests()
                     result = madnlp(m; print_level = MadNLP.ERROR)
                     @testset "MP w storage, $(case), $(T), $(backend), pregen, $(form_str)" begin
                         if T == Float32
-                            m64, v64, c64 = eval(mpopf_model)(filename, Pd_pregen, Qd_pregen; T=Float64, backend = backend)
+                            m64, v64, c64 = eval(mpopf_model)(filename, Pd_pregen, Qd_pregen; T=Float64, backend = backend, form = symbol)
                             result = madnlp(m64; print_level = MadNLP.ERROR)
                             test_float32(m, m64, result, backend)
                         else
@@ -216,7 +216,7 @@ function runtests()
                     result = madnlp(m; print_level = MadNLP.ERROR)
                     @testset "MP w storage, $(case), $(T), $(backend), pregen, $(form_str), func" begin
                         if T == Float32
-                            m64, v64, c64 = eval(mpopf_model)(filename, Pd_pregen, Qd_pregen, example_func; T=Float64, backend = backend)
+                            m64, v64, c64 = eval(mpopf_model)(filename, Pd_pregen, Qd_pregen, example_func; T=Float64, backend = backend, form = symbol)
                             result = madnlp(m64; print_level = MadNLP.ERROR)
                             test_float32(m, m64, result, backend)
                         else
