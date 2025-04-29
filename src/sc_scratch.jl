@@ -20,11 +20,11 @@ function sc_parser(data)
     L_J_ac = L_J_ln + L_J_xf
     L_J_dc = length(data.dc_line_lookup)
     L_J_br =  L_J_ac + L_J_dc
-    L_J_cspr = length(data.sdd_ts_lookup)
+    L_J_cs = length(data.sdd_ids_consumer)
+    L_J_pr = length(data.sdd_ids_producer)
+    L_J_cspr = L_J_cs + L_J_pr
     L_J_sh = length(data.shunt_lookup)
     
-
-
     sc_data = (
         bus = [
             begin
@@ -167,13 +167,120 @@ function sc_parser(data)
                 qdc_to_max = val["qdc_to_ub"]
                 to_bus = parse(Int, match(r"\d+", val["to_bus"]).match)
                 fr_bus = parse(Int, match(r"\d+", val["fr_bus"]).match)
-                (j=j, j_dc = j_dc, pdc_max=pdc_max, qdc_fr_min=qdc_fr_min, qdc_to_min=qdc_to_min, qdc_fr_max=qdc_fr_max, qdc_to_max=qdc_to_max, to_bus=to_bus, fr_bus=fr_bus)
+                (j=j, j_dc = j_dc, uid=uid, pdc_max=pdc_max, qdc_fr_min=qdc_fr_min, qdc_to_min=qdc_to_min, qdc_fr_max=qdc_fr_max, qdc_to_max=qdc_to_max, to_bus=to_bus, fr_bus=fr_bus)
             end for val in values(data.dc_line_lookup)
 
-        ]
-    
+        ],
 
+        prod_cons = vcat(
+            # Producers
+            [
+                begin
+                    ts_val = data.sdd_ts_lookup[key]
+                    j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                    j_pr = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                    uid = val["uid"]
+                    c_on = val["on_cost"]
+                    c_su = val["startup_cost"]
+                    c_sd = val["shutdown_cost"]
+                    p_ru = val["p_ramp_up_ub"]
+                    p_rd = val["p_ramp_down_ub"]
+                    p_ru_su = val["p_startup_ramp_ub"]
+                    p_rs_sd = val["p_shutdown_ramp_ub"]
+                    c_rgu = ts_val["p_reg_res_up_cost"]
+                    c_rgd = ts_val["p_reg_res_down_cost"]
+                    c_scr = ts_val["p_syn_res_cost"]
+                    c_nsc = ts_val["p_nsyn_res_cost"]
+                    c_rru_on = ts_val["p_ramp_res_up_online_cost"]
+                    c_rru_off = ts_val["p_ramp_res_up_offline_cost"]
+                    c_rrd_on = ts_val["p_ramp_res_down_online_cost"]
+                    c_rrd_off = ts_val["p_ramp_res_down_offline_cost"]
+                    c_qru = ts_val["q_res_up_cost"]
+                    c_qrd = ts_val["q_res_down_cost"]
+                    p_rgu_max = val["p_reg_res_up_ub"]
+                    p_rgd_max = val["p_reg_res_down_ub"]
+                    p_scr_max = val["p_syn_res_ub"]
+                    p_nsc_max = val["p_nsyn_res_ub"]
+                    p_rru_on_max = val["p_ramp_res_up_online_ub"]
+                    p_rru_off_max = val["p_ramp_res_up_offline_ub"]
+                    p_rrd_on_max = val["p_ramp_res_down_online_ub"]
+                    p_rrd_off_max = val["p_ramp_res_down_offline_ub"]
+                    
+                    (j = j, j_prcs = j_prcs, j_pr = j_pr, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rs_sd = p_rs_sd, 
+                    c_rgu = c_rgu, c_rg = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
+                    c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
+                    p_rru_off_max, p_rrd_on_max, p_rrd_off_max)
+                end for (key, val) in data.sdd_lookup if val["device_type"] == "producer"
+            ],
+            
+            #Consumers
+            [
+                begin
+                    ts_val = data.sdd_ts_lookup[key]
+                    j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                    j_cs = parse(Int, match(r"\d+", val["uid"]).match) + L_J_pr + 1
+                    uid = val["uid"]
+                    c_on = val["on_cost"]
+                    c_su = val["startup_cost"]
+                    c_sd = val["shutdown_cost"]
+                    p_ru = val["p_ramp_up_ub"]
+                    p_rd = val["p_ramp_down_ub"]
+                    p_ru_su = val["p_startup_ramp_ub"]
+                    p_rs_sd = val["p_shutdown_ramp_ub"]
+                    c_rgu = ts_val["p_reg_res_up_cost"]
+                    c_rgd = ts_val["p_reg_res_down_cost"]
+                    c_scr = ts_val["p_syn_res_cost"]
+                    c_nsc = ts_val["p_nsyn_res_cost"]
+                    c_rru_on = ts_val["p_ramp_res_up_online_cost"]
+                    c_rru_off = ts_val["p_ramp_res_up_offline_cost"]
+                    c_rrd_on = ts_val["p_ramp_res_down_online_cost"]
+                    c_rrd_off = ts_val["p_ramp_res_down_offline_cost"]
+                    c_qru = ts_val["q_res_up_cost"]
+                    c_qrd = ts_val["q_res_down_cost"]
+                    p_rgu_max = val["p_reg_res_up_ub"]
+                    p_rgd_max = val["p_reg_res_down_ub"]
+                    p_scr_max = val["p_syn_res_ub"]
+                    p_nsc_max = val["p_nsyn_res_ub"]
+                    p_rru_on_max = val["p_ramp_res_up_online_ub"]
+                    p_rru_off_max = val["p_ramp_res_up_offline_ub"]
+                    p_rrd_on_max = val["p_ramp_res_down_online_ub"]
+                    p_rrd_off_max = val["p_ramp_res_down_offline_ub"]
+                    
+                    (j = j, j_prcs = j_prcs, j_cs = j_cs, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rs_sd = p_rs_sd, 
+                    c_rgu = c_rgu, c_rg = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
+                    c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
+                    p_rru_off_max, p_rrd_on_max, p_rrd_off_max)                
+                end for (key, val) in data.sdd_lookup if val["device_type"] == "consumer"
+            ]
+        ),
+        active_reserve = [
+            begin
+                ts_val = data.azr_ts_lookup[key]
+                j = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                uid = val["uid"]
+                c_rgu = val["REG_UP_vio_cost"]
+                c_rgd = val["REG_DOWN_vio_cost"]
+                c_scr = val["SYN_vio_cost"]
+                c_nsc = val["NSYN_vio_cost"]
+                c_rru = val["RAMPING_RESERVE_UP_vio_cost"]
+                c_rrd = val["RAMPING_RESERVE_DOWN_vio_cost"]
+                σ_rgu = val["REG_UP"]
+                σ_rgd = val["REG_DOWN"]
+                σ_scr = val["SYN"]
+                σ_nsc = val["NSYN"]
+                p_rru_min = ts_val["RAMPING_RESERVE_UP"]
+                p_rrd_min = ts_val["RAMPING_RESERVE_DOWN"]
+                (j=j, uid=uid, c_rgu=c_rgu, c_rgd=c_rgd, c_scr=c_scr, c_nsc=c_nsc, c_rru=c_rru, c_rrd=c_rrd, σ_rgu=σ_rgu, σ_rgd=σ_rgd, σ_scr=σ_scr, 
+                σ_nsc=σ_nsc, p_rru_min=p_rru_min, p_rrd_min=p_rrd_min)
+            end for (key, val) in data.azr_lookup
+
+        ],
+    
 
     )
     return sc_data
 end
+
+
