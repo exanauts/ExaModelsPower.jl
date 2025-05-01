@@ -14,7 +14,7 @@ using GOC3Benchmark, JSON
 uc_data = JSON.parsefile("solution.json")
 data = GOC3Benchmark.get_data_from_file("data/C3E4N00073D1_scenario_303.json")
 
-function sc_parser(data)
+function parse_sc_data_static(data)
     L_J_xf = length(data.twt_lookup)
     L_J_ln = length(data.ac_line_lookup)
     L_J_ac = L_J_ln + L_J_xf
@@ -24,9 +24,14 @@ function sc_parser(data)
     L_J_pr = length(data.sdd_ids_producer)
     L_J_cspr = L_J_cs + L_J_pr
     L_J_sh = length(data.shunt_lookup)
+    L_N_p = length(data.azr_lookup)
+    L_N_q = length(data.rzr_lookup)
+
+    lengths = (L_J_xf=L_J_xf, L_J_ln=L_J_ln, L_J_ac=L_J_ac, L_J_dc=L_J_dc, L_J_br=L_J_br, L_J_cs=L_J_cs,
+    L_J_pr=L_J_pr, L_J_cspr = L_J_cspr, L_J_sh=L_J_sh)
     
     sc_data = (
-        bus = [
+        bus = sort([
             begin
                 i = parse(Int, match(r"\d+", val["uid"]).match)+1
                 uid = val["uid"]
@@ -34,9 +39,9 @@ function sc_parser(data)
                 v_max = val["vm_ub"]
                 (i = i, uid = uid, v_min = v_min, v_max = v_max)
             end for val in values(data.bus_lookup)
-        ],
+        ], by = x -> x.i),
 
-        shunt = [
+        shunt = sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + L_J_cspr+1
                 j_sh = parse(Int, match(r"\d+", val["uid"]).match)+1
@@ -44,11 +49,11 @@ function sc_parser(data)
                 bus = parse(Int, match(r"\d+", val["bus"]).match)+1
                 g_sh = val["gs"]
                 b_sh = val["bs"]
-                (j = j, uid = uid, g_sh = g_sh, b_sh = b_sh)
+                (j = j, j_sh=j_sh, uid = uid, bus=bus, g_sh = g_sh, b_sh = b_sh)
             end for val in values(data.shunt_lookup)
-        ],
+        ], by = x -> x.j),
 
-        ac_branch = vcat(
+        ac_branch = sort(vcat(
             # AC lines
             [
                 begin
@@ -114,9 +119,9 @@ function sc_parser(data)
                     g_sr = g_sr, b_sr = b_sr, b_ch = b_ch, g_fr = g_fr, g_to = g_to, b_fr = b_fr, b_to = b_to)                
                 end for val in values(data.twt_lookup)
             ]
-        ),
+        ), by = x -> x.j),
         #Variable phase difference
-        vpd = [
+        vpd = sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
@@ -124,18 +129,18 @@ function sc_parser(data)
                 phi_max = val["ta_ub"]
                 (j = j, j_ac = j_ac, phi_min = phi_min, phi_max = phi_max)
             end for val in values(data.twt_lookup) if val["ta_lb"] < val["ta_ub"]
-        ], 
+        ], by = x -> x.j),
         #Fixed phase difference
-        fpd = [
+        fpd = sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
                 phi_o = val["initial_status"]["ta"]
                 (j = j, j_ac = j_ac, phi_o = phi_o)
             end for val in values(data.twt_lookup) if val["ta_lb"] >= val["ta_ub"]
-        ],
+        ], by = x -> x.j),
         #Variable winding ratio
-        vwd = [
+        vwd = sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
@@ -143,9 +148,9 @@ function sc_parser(data)
                 tau_max = val["tm_ub"]
                 (j=j, j_ac=j_ac, tau_min=tau_min, tau_max=tau_max)
             end for val in values(data.twt_lookup) if val["tm_lb"] < val["tm_ub"]
-        ],
+        ], by = x -> x.j),
         #Fixed winding ratio
-        fwd = [
+        fwd = sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
@@ -153,9 +158,9 @@ function sc_parser(data)
                 (j=j, j_ac=j_ac, tau_o=tau_o)
             end for val in values(data.twt_lookup) if val["tm_lb"] >= val["tm_ub"]
 
-        ],
+        ], by = x -> x.j),
 
-        dc_branch = [
+        dc_branch = sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ac+1
                 j_dc = parse(Int, match(r"\d+", val["uid"]).match)+1
@@ -170,9 +175,9 @@ function sc_parser(data)
                 (j=j, j_dc = j_dc, uid=uid, pdc_max=pdc_max, qdc_fr_min=qdc_fr_min, qdc_to_min=qdc_to_min, qdc_fr_max=qdc_fr_max, qdc_to_max=qdc_to_max, to_bus=to_bus, fr_bus=fr_bus)
             end for val in values(data.dc_line_lookup)
 
-        ],
+        ], by = x -> x.j),
 
-        prod_cons = vcat(
+        prod_cons = sort(vcat(
             # Producers
             [
                 begin
@@ -180,6 +185,7 @@ function sc_parser(data)
                     j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
                     j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1
                     j_pr = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                    bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
                     uid = val["uid"]
                     c_on = val["on_cost"]
                     c_su = val["startup_cost"]
@@ -207,7 +213,7 @@ function sc_parser(data)
                     p_rrd_on_max = val["p_ramp_res_down_online_ub"]
                     p_rrd_off_max = val["p_ramp_res_down_offline_ub"]
                     
-                    (j = j, j_prcs = j_prcs, j_pr = j_pr, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rs_sd = p_rs_sd, 
+                    (j = j, j_prcs = j_prcs, j_pr = j_pr, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rs_sd = p_rs_sd, 
                     c_rgu = c_rgu, c_rg = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
                     p_rru_off_max, p_rrd_on_max, p_rrd_off_max)
@@ -220,7 +226,8 @@ function sc_parser(data)
                     ts_val = data.sdd_ts_lookup[key]
                     j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
                     j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1
-                    j_cs = parse(Int, match(r"\d+", val["uid"]).match) + L_J_pr + 1
+                    j_cs = parse(Int, match(r"\d+", val["uid"]).match) - L_J_pr + 1
+                    bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
                     uid = val["uid"]
                     c_on = val["on_cost"]
                     c_su = val["startup_cost"]
@@ -248,17 +255,18 @@ function sc_parser(data)
                     p_rrd_on_max = val["p_ramp_res_down_online_ub"]
                     p_rrd_off_max = val["p_ramp_res_down_offline_ub"]
                     
-                    (j = j, j_prcs = j_prcs, j_cs = j_cs, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rs_sd = p_rs_sd, 
+                    (j = j, j_prcs = j_prcs, j_cs = j_cs, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rs_sd = p_rs_sd, 
                     c_rgu = c_rgu, c_rg = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
                     p_rru_off_max, p_rrd_on_max, p_rrd_off_max)                
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "consumer"
             ]
-        ),
-        active_reserve = [
+        ), by = x -> x.j),
+        active_reserve = sort([
             begin
                 ts_val = data.azr_ts_lookup[key]
-                j = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                n = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                n_p = n
                 uid = val["uid"]
                 c_rgu = val["REG_UP_vio_cost"]
                 c_rgd = val["REG_DOWN_vio_cost"]
@@ -272,15 +280,62 @@ function sc_parser(data)
                 σ_nsc = val["NSYN"]
                 p_rru_min = ts_val["RAMPING_RESERVE_UP"]
                 p_rrd_min = ts_val["RAMPING_RESERVE_DOWN"]
-                (j=j, uid=uid, c_rgu=c_rgu, c_rgd=c_rgd, c_scr=c_scr, c_nsc=c_nsc, c_rru=c_rru, c_rrd=c_rrd, σ_rgu=σ_rgu, σ_rgd=σ_rgd, σ_scr=σ_scr, 
+                (n=n, n_p=n_p, uid=uid, c_rgu=c_rgu, c_rgd=c_rgd, c_scr=c_scr, c_nsc=c_nsc, c_rru=c_rru, c_rrd=c_rrd, σ_rgu=σ_rgu, σ_rgd=σ_rgd, σ_scr=σ_scr, 
                 σ_nsc=σ_nsc, p_rru_min=p_rru_min, p_rrd_min=p_rrd_min)
             end for (key, val) in data.azr_lookup
+        ], by = x -> x.n),
+        reactive_reserve = sort([
+            begin
+                ts_val = data.rzr_ts_lookup[key]
+                n = parse(Int, match(r"\d+", val["uid"]).match) + L_N_p + 1
+                n_q = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                uid = val["uid"]
+                c_qru = val["REACT_UP_vio_cost"]
+                c_qrd = val["REACT_DOWN_vio_cost"]
+                q_qru_min = ts_val["REACT_UP"]
+                q_qrd_min = ts_val["REACT_DOWN"]
+                (n=n, n_q=n_q, uid=uid, c_qru=c_qru, c_qrd=c_qrd, q_qru_min=q_qru_min, q_qrd_min=q_qrd_min)
+            end for (key, val) in data.rzr_lookup
+        ], by = x -> x.n),
 
+        active_reserve_set = [
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + 1,
+            j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1)
+            for uid in data.azr_ids
+            for bus in values(data.bus_lookup)
+            if uid in bus["active_reserve_uids"]
+            for device in values(data.sdd_lookup)
+            if device["bus"] == bus["uid"]
         ],
-    
 
+        reactive_reserve_set = [
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + L_N_p + 1,
+            j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1)
+            for uid in data.rzr_ids
+            for bus in values(data.bus_lookup)
+            if uid in bus["reactive_reserve_uids"]
+            for device in values(data.sdd_lookup)
+            if device["bus"] == bus["uid"]
+        ]
+    
     )
-    return sc_data
+    return sc_data, lengths
 end
 
+function parse_sc_data(data)
+    sc_data, lengths = parse_sc_data_static(data)
+    periods = data.periods
+    sc_time_data = (
+        ;
+        data...,
+        busarray = [(;b..., t=t) for b in sc_data.bus, t in periods],
+        shuntarray = [
+            (;s..., t=t, u_sh = uc["step"][t])
+            for s in sc_data.shunt, t in periods
+            for uc in uc_data["time_series_output"]["shunt"]
+            if s.uid == uc["uid"]
+                ]
+    )
 
+    return sc_time_data, lengths
+end
