@@ -29,6 +29,8 @@ function parse_sc_data_static(data)
 
     lengths = (L_J_xf=L_J_xf, L_J_ln=L_J_ln, L_J_ac=L_J_ac, L_J_dc=L_J_dc, L_J_br=L_J_br, L_J_cs=L_J_cs,
     L_J_pr=L_J_pr, L_J_cspr = L_J_cspr, L_J_sh=L_J_sh)
+
+    ε_time = 1e-6
     
     sc_data = (
         bus = sort([
@@ -316,15 +318,74 @@ function parse_sc_data_static(data)
             if uid in bus["reactive_reserve_uids"]
             for device in values(data.sdd_lookup)
             if device["bus"] == bus["uid"]
+        ],
+
+        T_sus_jft = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            t = t,
+            t_prime = t_prime, 
+            f = f
+            )
+            for val in values(data.sdd_lookup)
+            for f in 1:length(val["startup_states"])
+            for t in 1:length(data.dt)
+            for t_prime in 1:length(data.dt)
+            if t_prime < t && get_as(data.dt,t)[1] - get_as(data.dt, t_prime)[1] <= val["startup_states"][f][2] + ε_time
         ]
     
     )
     return sc_data, lengths
 end
 
-function parse_sc_data(data)
+function add_status_flags(uc_data, data)
+    for dict in uc_data
+        uid = dict["uid"]
+        on_status = dict["on_status"]
+        n = length(on_status)
+        u_on_o = data[uid]["initial_status"]["on_status"]
+
+        su_status = zeros(Int, n)
+        sd_status = zeros(Int, n)
+
+        # Handle first index using u_on_o if provided
+        
+        if u_on_o == 0 && on_status[1] == 1
+            su_status[1] = 1
+        elseif u_on_o == 1 && on_status[1] == 0
+            sd_status[1] = 1
+        end
+        
+
+        # Iterate from 1 to n-1 for the rest
+        for i in 1:n-1
+            if on_status[i] == 0 && on_status[i+1] == 1
+                su_status[i+1] = 1
+            end
+            if on_status[i] == 1 && on_status[i+1] == 0
+                sd_status[i+1] = 1
+            end
+        end
+
+        dict["su_status"] = su_status
+        dict["sd_status"] = sd_status
+    end
+end
+
+function get_as(dt, t)
+    a_end = sum(dt[1:t])
+    a_start = a_end - dt[t]
+    a_mid = (a_start + a_end)/2
+    return a_start, a_mid, a_end
+end
+
+function parse_sc_data(data, uc_data)
     sc_data, lengths = parse_sc_data_static(data)
     periods = data.periods
+    add_status_flags(uc_data["time_series_output"]["ac_line"], data.ac_line_lookup)
+    add_status_flags(uc_data["time_series_output"]["two_winding_transformer"], data.twt_lookup)
+    add_status_flags(uc_data["time_series_output"]["simple_dispatchable_device"], data.sdd_lookup)
+
     sc_time_data = (
         ;
         data...,
