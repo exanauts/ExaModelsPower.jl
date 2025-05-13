@@ -31,6 +31,23 @@ function parse_sc_data_static(data)
     L_J_pr=L_J_pr, L_J_cspr = L_J_cspr, L_J_sh=L_J_sh)
 
     ε_time = 1e-6
+
+    #Build a p_sdpc set to be used for T_sdpc
+    #Index order is j_prcs, t, t_prime
+    p_sdpc = zeros(L_J_cspr, length(data.dt), length(data.dt))
+
+    for t in 1:length(data.dt)
+        for t_prime in 1:length(data.dt)
+            for (key, val) in data.sdd_lookup
+                if t_prime == 1 && t >= t_prime
+                    p_sdpc[parse(Int, match(r"\d+", val["uid"]).match)+1, t, t_prime] = val["initial_status"]["p"] - val["p_shutdown_ramp_ub"]*(get_as(data.dt, t)[3] - get_as(data.dt, t_prime)[1])
+                elseif t >= t_prime
+                    p_sdpc[parse(Int, match(r"\d+", val["uid"]).match)+1, t, t_prime] = data.sdd_ts_lookup[key]["p_lb"][t_prime-1]- val["p_shutdown_ramp_ub"]*(get_as(data.dt, t)[3] - get_as(data.dt, t_prime)[1])
+                end
+            end
+        end
+    end
+
     
     sc_data = (
         bus = sort([
@@ -320,6 +337,32 @@ function parse_sc_data_static(data)
             if device["bus"] == bus["uid"]
         ],
 
+        T_supc = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            t = t,
+            t_prime = t_prime, 
+            p_supc = data.sdd_ts_lookup[key]["p_lb"][t_prime] - val["p_startup_ramp_ub"]*(get_as(data.dt, t_prime)[3] - get_as(data.dt, t)[3])
+        )
+        for (key, val) in data.sdd_lookup
+        for t in 1:length(data.dt)
+        for t_prime in 1:length(data.dt)
+        if t_prime > t && data.sdd_ts_lookup[key]["p_lb"][t_prime] - val["p_startup_ramp_ub"]*(get_as(data.dt, t_prime)[3] - get_as(data.dt, t)[3]) > 0
+        ],
+
+        T_sdpc = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            t = t,
+            t_prime = t_prime,
+            p_sdpc = p_sdpc[parse(Int, match(r"\d+", val["uid"]).match)+1, t, t_prime]
+            )
+        for (key, val) in data.sdd_lookup
+        for t in 1:length(data.dt)
+        for t_prime in 1:length(data.dt)
+        if t_prime <= t && p_sdpc[parse(Int, match(r"\d+", val["uid"]).match)+1, t, t_prime] > 0
+        ],
+
         T_sus_jft = [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
             j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
@@ -332,7 +375,19 @@ function parse_sc_data_static(data)
             for t in 1:length(data.dt)
             for t_prime in 1:length(data.dt)
             if t_prime < t && get_as(data.dt,t)[1] - get_as(data.dt, t_prime)[1] <= val["startup_states"][f][2] + ε_time
-        ]
+        ],
+
+        T_sus_jf = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            f = f,
+            t =t
+            )
+            for val in values(data.sdd_lookup)
+            for f in 1:length(val["startup_states"])
+            for t in 1:length(data.dt)
+            if val["initial_status"]["accu_down_time"] + get_as(data.dt, t)[1] > ε_time + val["startup_states"][f][2]
+        ],
     
     )
     return sc_data, lengths
