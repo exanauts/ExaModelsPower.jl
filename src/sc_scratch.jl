@@ -388,6 +388,88 @@ function parse_sc_data_static(data)
             for t in 1:length(data.dt)
             if val["initial_status"]["accu_down_time"] + get_as(data.dt, t)[1] > ε_time + val["startup_states"][f][2]
         ],
+
+        W_en_max = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            a_en_max_start = w[1],
+            a_en_max_end = w[2],
+            e_max = w[3]
+            )
+            for val in values(data.sdd_lookup)
+            for w in val["energy_req_ub"]
+        ],
+
+        W_en_min = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            a_en_min_start = w[1],
+            a_en_min_end = w[2],
+            e_min = w[3]
+            )
+            for val in values(data.sdd_lookup)
+            for w in val["energy_req_lb"]
+        ],
+
+        W_su_max = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            a_su_max_start = w[1],
+            a_su_max_end = w[2],
+            e_su_max = w[3]
+            )
+            for val in values(data.sdd_lookup)
+            for w in val["startups_ub"]
+        ],
+                
+        T_w_en_max = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            t = t
+            )
+            for val in values(data.sdd_lookup)
+            for w in val["energy_req_ub"]
+            for t in 1:length(data.dt)
+            if w[1] + ε_time < get_as(data.dt, t)[2] && get_as(data.dt, t)[2] <= w[2] + ε_time
+        ],
+
+        T_w_en_min = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            t = t
+            )
+            for val in values(data.sdd_lookup)
+            for w in val["energy_req_lb"]
+            for t in 1:length(data.dt)
+            if w[1] + ε_time < get_as(data.dt, t)[2] && get_as(data.dt, t)[2] <= w[2] + ε_time
+        ],
+        
+
+        T_w_su_max = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            t = t
+            )
+            for val in values(data.sdd_lookup)
+            for w in val["startups_ub"]
+            for t in 1:length(data.dt)
+            if w[1] <= get_as(data.dt, t)[1] + ε_time && get_as(data.dt, t)[1] + ε_time < w[2]
+        ],
+
+        M = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            t = t,
+            m = m,
+            c_en = data.sdd_ts_lookup[key]["cost"][t][m][1],
+            p_max = data.sdd_ts_lookup[key]["cost"][t][m][2]
+            )
+            for (key, val) in data.sdd_lookup
+            for t in 1:length(data.dt)
+            for m in 1:length(data.sdd_ts_lookup[key]["cost"][t])
+        ]
+
+
     
     )
     return sc_data, lengths
