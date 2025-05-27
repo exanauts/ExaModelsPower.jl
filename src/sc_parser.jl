@@ -48,6 +48,36 @@ function parse_sc_data_static(data)
         end
     end
 
+    cost_vector = sort(vcat(
+            #producers
+            [
+                begin
+                    ts_val = data.sdd_ts_lookup[key]
+                    j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                    j_pr = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                    bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
+                    uid = val["uid"]
+                    cost = ts_val["cost"]
+                    (j = j, j_prcs = j_prcs, j_pr = j_pr, bus=bus, uid = uid, cost=cost)
+                end for (key, val) in data.sdd_lookup if val["device_type"] == "producer"
+                
+            ],
+            #Consumers
+            [
+                begin
+                    ts_val = data.sdd_ts_lookup[key]
+                    j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1
+                    j_cs = parse(Int, match(r"\d+", val["uid"]).match) - L_J_pr + 1
+                    bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
+                    uid = val["uid"]
+                    cost = ts_val["cost"]
+                    (j = j, j_prcs = j_prcs, j_cs = j_cs, bus=bus, uid = uid, cost=cost)
+                end for (key, val) in data.sdd_lookup if val["device_type"] == "consumer"
+            ]
+        ), by = x -> x.j)
+
     
     sc_data = (
         bus = sort([
@@ -72,7 +102,7 @@ function parse_sc_data_static(data)
             end for val in values(data.shunt_lookup)
         ], by = x -> x.j),
 
-        ac_branch = sort(vcat(
+        acl_branch = sort(
             # AC lines
             [
                 begin
@@ -104,9 +134,10 @@ function parse_sc_data_static(data)
                     (j = j, j_ac = j_ac, j_ln = j_ln, uid = uid, to_bus = to_bus, fr_bus = fr_bus, c_su = c_su, c_sd = c_sd, s_max = s_max, 
                     g_sr = g_sr, b_sr = b_sr, b_ch = b_ch, g_fr = g_fr, g_to = g_to, b_fr = b_fr, b_to = b_to)
                 end for val in values(data.ac_line_lookup)
-            ],
+            ],by = x -> x.j),
             
             # Transformers
+        acx_branch = sort(
             [
                 begin
                     j_xf = parse(Int, match(r"\d+", val["uid"]).match)+1
@@ -138,9 +169,9 @@ function parse_sc_data_static(data)
                     g_sr = g_sr, b_sr = b_sr, b_ch = b_ch, g_fr = g_fr, g_to = g_to, b_fr = b_fr, b_to = b_to)                
                 end for val in values(data.twt_lookup)
             ]
-        ), by = x -> x.j),
+        , by = x -> x.j),
         #Variable phase difference
-        vpd = sort([
+        vpd = isempty(val for val in values(data.twt_lookup) if val["ta_lb"] < val["ta_ub"]) ? empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
@@ -150,7 +181,7 @@ function parse_sc_data_static(data)
             end for val in values(data.twt_lookup) if val["ta_lb"] < val["ta_ub"]
         ], by = x -> x.j),
         #Fixed phase difference
-        fpd = sort([
+        fpd = isempty(val for val in values(data.twt_lookup) if val["ta_lb"] >= val["ta_ub"]) ? empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
@@ -159,7 +190,7 @@ function parse_sc_data_static(data)
             end for val in values(data.twt_lookup) if val["ta_lb"] >= val["ta_ub"]
         ], by = x -> x.j),
         #Variable winding ratio
-        vwr = sort([
+        vwr = isempty(val for val in values(data.twt_lookup) if val["tm_lb"] < val["tm_ub"]) ? empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
@@ -169,7 +200,7 @@ function parse_sc_data_static(data)
             end for val in values(data.twt_lookup) if val["tm_lb"] < val["tm_ub"]
         ], by = x -> x.j),
         #Fixed winding ratio
-        fwr = sort([
+        fwr = isempty(val for val in values(data.twt_lookup) if val["tm_lb"] >= val["tm_ub"]) ? empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : sort([
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
@@ -196,7 +227,7 @@ function parse_sc_data_static(data)
 
         ], by = x -> x.j),
 
-        prod_cons = sort(vcat(
+        prod = sort(
             # Producers
             [
                 begin
@@ -213,16 +244,16 @@ function parse_sc_data_static(data)
                     p_rd = val["p_ramp_down_ub"]
                     p_ru_su = val["p_startup_ramp_ub"]
                     p_rs_sd = val["p_shutdown_ramp_ub"]
-                    c_rgu = ts_val["p_reg_res_up_cost"]
-                    c_rgd = ts_val["p_reg_res_down_cost"]
-                    c_scr = ts_val["p_syn_res_cost"]
-                    c_nsc = ts_val["p_nsyn_res_cost"]
-                    c_rru_on = ts_val["p_ramp_res_up_online_cost"]
-                    c_rru_off = ts_val["p_ramp_res_up_offline_cost"]
-                    c_rrd_on = ts_val["p_ramp_res_down_online_cost"]
-                    c_rrd_off = ts_val["p_ramp_res_down_offline_cost"]
-                    c_qru = ts_val["q_res_up_cost"]
-                    c_qrd = ts_val["q_res_down_cost"]
+                    c_rgu = convert(Vector{Float64}, ts_val["p_reg_res_up_cost"]) #these need checks to see if empty
+                    c_rgd = convert(Vector{Float64}, ts_val["p_reg_res_down_cost"])
+                    c_scr = convert(Vector{Float64}, ts_val["p_syn_res_cost"])
+                    c_nsc = convert(Vector{Float64}, ts_val["p_nsyn_res_cost"])
+                    c_rru_on = convert(Vector{Float64}, ts_val["p_ramp_res_up_online_cost"])
+                    c_rru_off = convert(Vector{Float64}, ts_val["p_ramp_res_up_offline_cost"])
+                    c_rrd_on = convert(Vector{Float64}, ts_val["p_ramp_res_down_online_cost"])
+                    c_rrd_off = convert(Vector{Float64}, ts_val["p_ramp_res_down_offline_cost"])
+                    c_qru = convert(Vector{Float64}, ts_val["q_res_up_cost"])
+                    c_qrd = convert(Vector{Float64}, ts_val["q_res_down_cost"])
                     p_rgu_max = val["p_reg_res_up_ub"]
                     p_rgd_max = val["p_reg_res_down_ub"]
                     p_scr_max = val["p_syn_res_ub"]
@@ -237,9 +268,11 @@ function parse_sc_data_static(data)
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
                     p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max)
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "producer"
-            ],
+            ], by = x -> x.j),
+        
             
-            #Consumers
+        #Consumers
+        cons = sort(
             [
                 begin
                     ts_val = data.sdd_ts_lookup[key]
@@ -255,16 +288,16 @@ function parse_sc_data_static(data)
                     p_rd = val["p_ramp_down_ub"]
                     p_ru_su = val["p_startup_ramp_ub"]
                     p_rs_sd = val["p_shutdown_ramp_ub"]
-                    c_rgu = ts_val["p_reg_res_up_cost"]
-                    c_rgd = ts_val["p_reg_res_down_cost"]
-                    c_scr = ts_val["p_syn_res_cost"]
-                    c_nsc = ts_val["p_nsyn_res_cost"]
-                    c_rru_on = ts_val["p_ramp_res_up_online_cost"]
-                    c_rru_off = ts_val["p_ramp_res_up_offline_cost"]
-                    c_rrd_on = ts_val["p_ramp_res_down_online_cost"]
-                    c_rrd_off = ts_val["p_ramp_res_down_offline_cost"]
-                    c_qru = ts_val["q_res_up_cost"]
-                    c_qrd = ts_val["q_res_down_cost"]
+                    c_rgu = convert(Vector{Float64}, ts_val["p_reg_res_up_cost"])
+                    c_rgd = convert(Vector{Float64}, ts_val["p_reg_res_down_cost"])
+                    c_scr = convert(Vector{Float64}, ts_val["p_syn_res_cost"])
+                    c_nsc = convert(Vector{Float64}, ts_val["p_nsyn_res_cost"])
+                    c_rru_on = convert(Vector{Float64}, ts_val["p_ramp_res_up_online_cost"])
+                    c_rru_off = convert(Vector{Float64}, ts_val["p_ramp_res_up_offline_cost"])
+                    c_rrd_on = convert(Vector{Float64}, ts_val["p_ramp_res_down_online_cost"])
+                    c_rrd_off = convert(Vector{Float64}, ts_val["p_ramp_res_down_offline_cost"])
+                    c_qru = convert(Vector{Float64}, ts_val["q_res_up_cost"])
+                    c_qrd = convert(Vector{Float64}, ts_val["q_res_down_cost"])
                     p_rgu_max = val["p_reg_res_up_ub"]
                     p_rgd_max = val["p_reg_res_down_ub"]
                     p_scr_max = val["p_syn_res_ub"]
@@ -273,14 +306,14 @@ function parse_sc_data_static(data)
                     p_rru_off_max = val["p_ramp_res_up_offline_ub"]
                     p_rrd_on_max = val["p_ramp_res_down_online_ub"]
                     p_rrd_off_max = val["p_ramp_res_down_offline_ub"]
-                    
+
                     (j = j, j_prcs = j_prcs, j_cs = j_cs, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rs_sd = p_rs_sd, 
                     c_rgu = c_rgu, c_rgd = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
                     p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max)                
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "consumer"
             ]
-        ), by = x -> x.j),
+        , by = x -> x.j),
         active_reserve = sort([
             begin
                 ts_val = data.azr_ts_lookup[key]
@@ -297,8 +330,8 @@ function parse_sc_data_static(data)
                 σ_rgd = val["REG_DOWN"]
                 σ_scr = val["SYN"]
                 σ_nsc = val["NSYN"]
-                p_rru_min = ts_val["RAMPING_RESERVE_UP"]
-                p_rrd_min = ts_val["RAMPING_RESERVE_DOWN"]
+                p_rru_min = convert(Vector{Float64}, ts_val["RAMPING_RESERVE_UP"])
+                p_rrd_min = convert(Vector{Float64}, ts_val["RAMPING_RESERVE_DOWN"])
                 (n=n, n_p=n_p, uid=uid, c_rgu=c_rgu, c_rgd=c_rgd, c_scr=c_scr, c_nsc=c_nsc, c_rru=c_rru, c_rrd=c_rrd, σ_rgu=σ_rgu, σ_rgd=σ_rgd, σ_scr=σ_scr, 
                 σ_nsc=σ_nsc, p_rru_min=p_rru_min, p_rrd_min=p_rrd_min)
             end for (key, val) in data.azr_lookup
@@ -311,20 +344,30 @@ function parse_sc_data_static(data)
                 uid = val["uid"]
                 c_qru = val["REACT_UP_vio_cost"]
                 c_qrd = val["REACT_DOWN_vio_cost"]
-                q_qru_min = ts_val["REACT_UP"]
-                q_qrd_min = ts_val["REACT_DOWN"]
+                q_qru_min = convert(Vector{Float64}, ts_val["REACT_UP"])
+                q_qrd_min = convert(Vector{Float64}, ts_val["REACT_DOWN"])
                 (n=n, n_q=n_q, uid=uid, c_qru=c_qru, c_qrd=c_qrd, q_qru_min=q_qru_min, q_qrd_min=q_qrd_min)
             end for (key, val) in data.rzr_lookup
         ], by = x -> x.n),
 
-        active_reserve_set = [
+        active_reserve_set_pr = [
             (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + 1,
-            j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1)
+            j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1, j_pr = parse(Int, match(r"\d+", device["uid"]).match) + 1)
             for uid in data.azr_ids
             for bus in values(data.bus_lookup)
             if uid in bus["active_reserve_uids"]
             for device in values(data.sdd_lookup)
-            if device["bus"] == bus["uid"]
+            if device["bus"] == bus["uid"] && parse(Int, match(r"\d+", device["uid"]).match) < L_J_pr
+        ],
+
+        active_reserve_set_cs = [
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + 1,
+            j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1, j_cs = parse(Int, match(r"\d+", device["uid"]).match) + 1 - L_J_pr)
+            for uid in data.azr_ids
+            for bus in values(data.bus_lookup)
+            if uid in bus["active_reserve_uids"]
+            for device in values(data.sdd_lookup)
+            if device["bus"] == bus["uid"] && parse(Int, match(r"\d+", device["uid"]).match) >= L_J_pr
         ],
 
         reactive_reserve_set = [
@@ -389,7 +432,7 @@ function parse_sc_data_static(data)
             if val["initial_status"]["accu_down_time"] + get_as(data.dt, t)[1] > ε_time + val["startup_states"][f][2]
         ],
 
-        W_en_max = [
+        W_en_max = isempty([w for val in values(data.sdd_lookup) for w in val["energy_req_ub"]]) ?  empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
             j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
             a_en_max_start = w[1],
@@ -400,7 +443,7 @@ function parse_sc_data_static(data)
             for w in val["energy_req_ub"]
         ],
 
-        W_en_min = [
+        W_en_min = isempty([w for val in values(data.sdd_lookup) for w in val["energy_req_lb"]]) ?  empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
             j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
             a_en_min_start = w[1],
@@ -411,7 +454,7 @@ function parse_sc_data_static(data)
             for w in val["energy_req_lb"]
         ],
 
-        W_su_max = [
+        W_su_max = isempty([w for val in values(data.sdd_lookup) for w in val["startups_ub"]]) ?  empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
             j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
             a_su_max_start = w[1],
@@ -422,7 +465,7 @@ function parse_sc_data_static(data)
             for w in val["startups_ub"]
         ],
                 
-        T_w_en_max = [
+        T_w_en_max = isempty([w for val in values(data.sdd_lookup) for w in val["energy_req_ub"] for t in 1:length(data.dt) if w[1] + ε_time < get_as(data.dt, t)[2] && get_as(data.dt, t)[2] <= w[2] + ε_time]) ?  empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
             j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
             t = t
@@ -433,7 +476,7 @@ function parse_sc_data_static(data)
             if w[1] + ε_time < get_as(data.dt, t)[2] && get_as(data.dt, t)[2] <= w[2] + ε_time
         ],
 
-        T_w_en_min = [
+        T_w_en_min = isempty([w for val in values(data.sdd_lookup) for w in val["energy_req_lb"] for t in 1:length(data.dt) if w[1] + ε_time < get_as(data.dt, t)[2] && get_as(data.dt, t)[2] <= w[2] + ε_time]) ?  empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
             j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
             t = t
@@ -445,7 +488,7 @@ function parse_sc_data_static(data)
         ],
         
 
-        T_w_su_max = [
+        T_w_su_max = isempty([w for val in values(data.sdd_lookup) for w in val["startups_ub"] for t in 1:length(data.dt) if w[1] <= get_as(data.dt, t)[1] + ε_time && get_as(data.dt, t)[1] + ε_time < w[2]]) ?  empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
             j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
             t = t
@@ -470,7 +513,7 @@ function parse_sc_data_static(data)
         ]
     
     )
-    return sc_data, lengths
+    return sc_data, lengths, cost_vector
 end
 
 function add_status_flags(uc_data, data)
@@ -515,7 +558,7 @@ function get_as(dt, t)
 end
 
 function parse_sc_data(data, uc_data)
-    sc_data, lengths = parse_sc_data_static(data)
+    sc_data, lengths, cost_vector = parse_sc_data_static(data)
     periods = data.periods
     add_status_flags(uc_data["time_series_output"]["ac_line"], data.ac_line_lookup)
     add_status_flags(uc_data["time_series_output"]["two_winding_transformer"], data.twt_lookup)
@@ -526,13 +569,24 @@ function parse_sc_data(data, uc_data)
     empty_vwr = Vector{NamedTuple{(:j, :j_ac, :tau_min, :tau_max, :t), Tuple{Int64, Int64, Float64, Float64, Int64}}}()
     empty_fwr = Vector{NamedTuple{(:j, :j_ac, :tau_o, :t), Tuple{Int64, Int64, Float64, Int64}}}()
 
-    PRCSFields = (:j, :j_prcs, :j_cs, :bus, :uid, :c_on, :c_su, :c_sd, :p_ru, :p_rd, :p_ru_su, :p_rs_sd, 
-                    :c_rgu, :c_rgd, :c_scr, :c_nsc, :c_rru_on, :c_rru_off, :c_rrd_on, :c_rrd_off, 
-                    :c_qru, :c_qrd, :p_rgu_max, :p_rgd_max, :p_scr_max, :p_nsc_max, :p_rru_on_max,
-                    :p_rru_off_max, :p_rrd_on_max, :p_rrd_off_max)
+    flattened_prcs = Vector{@NamedTuple{flat_k::Int, j::Int, j_prcs::Int, t::Int, m::Int, c_en::Float64, p_max::Float64}}()
+    flat_k=1
+    for (pc_idx, pc) in pairs(cost_vector)
+        j=pc.j
+        j_prcs=pc.j_prcs
+        for (t, cost_t) in enumerate(pc.cost)
+            for (m, cost_tm) in enumerate(cost_t)
+                c_en, p_max = cost_tm
+                push!(flattened_prcs, (flat_k=flat_k, j=j, j_prcs=j_prcs, t=t, m=m, c_en=c_en, p_max=p_max))
+                flat_k+=1
+            end
+        end
+    end
+
 
     sc_time_data = (
         ;
+        sc_data...,
         dt = convert(Vector{Float64}, data.dt), 
         periods = periods,
         busarray = [(;b..., t=t) for b in sc_data.bus, t in periods],
@@ -550,25 +604,44 @@ function parse_sc_data(data, uc_data)
         qreservearray = [(;n=q.n, n_q=q.n_q, uid=q.uid, c_qru=q.c_qru, c_qrd=q.c_qrd, q_qru_min=q.q_qru_min[t], q_qrd_min=q.q_qrd_min[t], t=t)
         for q in sc_data.reactive_reserve, t in periods],
 
-        prcsarray = [(;j=p.j, j_prcs=p.j_prcs, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, p_ru=p.p_ru, p_rd=p.p_rd,  #j_cs and j_pr being left out here
+        prarray = [(;j=p.j, j_prcs=p.j_prcs, j_pr=p.j_pr, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, p_ru=p.p_ru, p_rd=p.p_rd,  
         p_ru_su=p.p_ru_su, p_rs_sd=p.p_rs_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
         c_rru_off=p.c_rru_off[t], c_rrd_on=p.c_rrd_on[t], c_rrd_off=p.c_rrd_off[t], c_qru=p.c_qru[t], c_qrd=p.c_qrd[t], p_rgu_max=p.p_rgu_max,
         p_rgd_max=p.p_rgd_max, p_scr_max=p.p_scr_max, p_nsc_max=p.p_nsc_max, p_rru_on_max=p.p_rru_on_max, p_rru_off_max=p.p_rru_off_max, 
         p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t)
-        for p in sc_data.prod_cons, t in periods
+        for p in sc_data.prod, t in periods
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
         if p.uid == uc["uid"]],
 
-        #=acbrancharray = [
-            (;, t=t)
-            for b in sc_data.ac_branch, t in periods
-            ],=#
+        csarray = [(;j=p.j, j_prcs=p.j_prcs, j_cs=p.j_cs, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, p_ru=p.p_ru, p_rd=p.p_rd,  
+        p_ru_su=p.p_ru_su, p_rs_sd=p.p_rs_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
+        c_rru_off=p.c_rru_off[t], c_rrd_on=p.c_rrd_on[t], c_rrd_off=p.c_rrd_off[t], c_qru=p.c_qru[t], c_qrd=p.c_qrd[t], p_rgu_max=p.p_rgu_max,
+        p_rgd_max=p.p_rgd_max, p_scr_max=p.p_scr_max, p_nsc_max=p.p_nsc_max, p_rru_on_max=p.p_rru_on_max, p_rru_off_max=p.p_rru_off_max, 
+        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t)
+        for p in sc_data.cons, t in periods
+        for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
+        if p.uid == uc["uid"]],
+
+        acxbrancharray = [
+            (;j=b.j, j_ac=b.j_ac, j_xf=b.j_xf, uid=b.uid, to_bus=b.to_bus, fr_bus=b.fr_bus, c_su=b.c_su, c_sd=b.c_sd, s_max=b.s_max, g_sr=b.g_sr, b_sr=b.b_sr, b_ch=b.b_ch,
+            g_fr=b.g_fr, g_to=b.g_to, b_fr=b.b_fr, b_to=b.b_to, u_on=uc["on_status"][t], u_su=uc["su_status"][t], u_sd=uc["sd_status"][t], t=t)
+            for b in sc_data.acx_branch, t in periods
+            for uc in uc_data["time_series_output"]["two_winding_transformer"]
+            if b.uid == uc["uid"]],
+
+        aclbrancharray = [
+            (;j=b.j, j_ac=b.j_ac, j_ln=b.j_ln, uid=b.uid, to_bus=b.to_bus, fr_bus=b.fr_bus, c_su=b.c_su, c_sd=b.c_sd, s_max=b.s_max, g_sr=b.g_sr, b_sr=b.b_sr, b_ch=b.b_ch,
+            g_fr=b.g_fr, g_to=b.g_to, b_fr=b.b_fr, b_to=b.b_to, u_on=uc["on_status"][t], u_su=uc["su_status"][t], u_sd=uc["sd_status"][t], t=t)
+            for b in sc_data.acl_branch, t in periods
+            for uc in uc_data["time_series_output"]["ac_line"]
+            if b.uid == uc["uid"]],
 
         fpdarray = isempty(sc_data.fpd) ? empty_data = empty_fpd : [(;b..., t=t) for b in sc_data.fpd, t in periods],
         fwrarray = isempty(sc_data.fwr) ? empty_data = empty_fwr : [(;b..., t=t) for b in sc_data.fwr, t in periods],
         vpdarray = isempty(sc_data.vpd) ? empty_data = empty_vpd : [(;b..., t=t) for b in sc_data.vpd, t in periods],
         vwrarray = isempty(sc_data.vwr) ? empty_data = empty_vwr : [(;b..., t=t) for b in sc_data.vwr, t in periods],
-        dclinearray = [(;b..., t=t) for b in sc_data.dc_branch, t in periods]
+        dclinearray = [(;b..., t=t) for b in sc_data.dc_branch, t in periods],
+        prcsflattened=flattened_prcs
 
     )
 
