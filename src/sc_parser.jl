@@ -351,7 +351,7 @@ function parse_sc_data_static(data)
         ], by = x -> x.n),
 
         active_reserve_set_pr = [
-            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + 1,
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + 1, n_p =  parse(Int, match(r"\d+", uid).match) + 1,
             j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1, j_pr = parse(Int, match(r"\d+", device["uid"]).match) + 1)
             for uid in data.azr_ids
             for bus in values(data.bus_lookup)
@@ -361,7 +361,7 @@ function parse_sc_data_static(data)
         ],
 
         active_reserve_set_cs = [
-            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + 1,
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + 1, n_p =  parse(Int, match(r"\d+", uid).match) + 1,
             j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1, j_cs = parse(Int, match(r"\d+", device["uid"]).match) + 1 - L_J_pr)
             for uid in data.azr_ids
             for bus in values(data.bus_lookup)
@@ -370,14 +370,24 @@ function parse_sc_data_static(data)
             if device["bus"] == bus["uid"] && parse(Int, match(r"\d+", device["uid"]).match) >= L_J_pr
         ],
 
-        reactive_reserve_set = [
-            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + L_N_p + 1,
-            j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1)
+        reactive_reserve_set_pr = [
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + L_N_p + 1, n_q = parse(Int, match(r"\d+", uid).match) + 1,
+            j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1, j_pr = parse(Int, match(r"\d+", device["uid"]).match) + 1)
             for uid in data.rzr_ids
             for bus in values(data.bus_lookup)
             if uid in bus["reactive_reserve_uids"]
             for device in values(data.sdd_lookup)
-            if device["bus"] == bus["uid"]
+            if device["bus"] == bus["uid"] && parse(Int, match(r"\d+", device["uid"]).match) < L_J_pr
+        ],
+
+        reactive_reserve_set_cs = [
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + L_N_p + 1, n_q = parse(Int, match(r"\d+", uid).match) + 1,
+            j_prcs = parse(Int, match(r"\d+", device["uid"]).match) + 1, j_cs = parse(Int, match(r"\d+", device["uid"]).match) + 1 - L_J_pr)
+            for uid in data.rzr_ids
+            for bus in values(data.bus_lookup)
+            if uid in bus["reactive_reserve_uids"]
+            for device in values(data.sdd_lookup)
+            if device["bus"] == bus["uid"] && parse(Int, match(r"\d+", device["uid"]).match) >= L_J_pr
         ],
 
         T_supc = [
@@ -510,7 +520,10 @@ function parse_sc_data_static(data)
             for (key, val) in data.sdd_lookup
             for t in 1:length(data.dt)
             for m in 1:length(data.sdd_ts_lookup[key]["cost"][t])
-        ]
+        ], 
+
+        dt = data.dt,
+        
     
     )
     return sc_data, lengths, cost_vector
@@ -589,7 +602,7 @@ function parse_sc_data(data, uc_data)
         sc_data...,
         dt = convert(Vector{Float64}, data.dt), 
         periods = periods,
-        busarray = [(;b..., t=t) for b in sc_data.bus, t in periods],
+        busarray = [(;b..., t=t, dt=sc_data.dt[t]) for b in sc_data.bus, t in periods],
         shuntarray = [
             (;s..., t=t, u_sh = uc["step"][t])
             for s in sc_data.shunt, t in periods
@@ -599,9 +612,9 @@ function parse_sc_data(data, uc_data)
 
         preservearray = [(;n=r.n, n_p=r.n_p, uid=r.uid, c_rgu=r.c_rgu, c_rgd=r.c_rgd, c_scr=r.c_scr, c_nsc=r.c_nsc, c_rru=r.c_rru, c_rrd=r.c_rrd,
         σ_rgu=r.σ_rgu, σ_rgd=r.σ_rgd, σ_scr=r.σ_scr, σ_nsc=r.σ_nsc, p_rru_min=r.p_rru_min[t], p_rrd_min=r.p_rrd_min[t],
-        t=t) for r in sc_data.active_reserve, t in periods],
+        t=t, dt=sc_data.dt[t]) for r in sc_data.active_reserve, t in periods],
 
-        qreservearray = [(;n=q.n, n_q=q.n_q, uid=q.uid, c_qru=q.c_qru, c_qrd=q.c_qrd, q_qru_min=q.q_qru_min[t], q_qrd_min=q.q_qrd_min[t], t=t)
+        qreservearray = [(;n=q.n, n_q=q.n_q, uid=q.uid, c_qru=q.c_qru, c_qrd=q.c_qrd, q_qru_min=q.q_qru_min[t], q_qrd_min=q.q_qrd_min[t], t=t, dt = sc_data.dt[t])
         for q in sc_data.reactive_reserve, t in periods],
 
         prarray = [(;j=p.j, j_prcs=p.j_prcs, j_pr=p.j_pr, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, p_ru=p.p_ru, p_rd=p.p_rd,  
@@ -641,6 +654,10 @@ function parse_sc_data(data, uc_data)
         vpdarray = isempty(sc_data.vpd) ? empty_data = empty_vpd : [(;b..., t=t) for b in sc_data.vpd, t in periods],
         vwrarray = isempty(sc_data.vwr) ? empty_data = empty_vwr : [(;b..., t=t) for b in sc_data.vwr, t in periods],
         dclinearray = [(;b..., t=t) for b in sc_data.dc_branch, t in periods],
+        preservesetarray_pr = [(;b..., t=t) for b in sc_data.active_reserve_set_pr, t in periods],
+        preservesetarray_cs = [(;b..., t=t) for b in sc_data.active_reserve_set_cs, t in periods],
+        qreservesetarray_pr = [(;b..., t=t) for b in sc_data.reactive_reserve_set_pr, t in periods],
+        qreservesetarray_cs = [(;b..., t=t) for b in sc_data.reactive_reserve_set_cs, t in periods],
         prcsflattened=flattened_prcs
 
     )
