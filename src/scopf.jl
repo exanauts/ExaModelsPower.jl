@@ -15,12 +15,14 @@ function scopf_model(
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
     L_J_pr, L_J_cspr, L_J_sh) = lengths
 
-    L_T = length(data.dt)
+    L_T = length(sc_data.dt)
     I = length(sc_data.bus)
     Np = length(sc_data.active_reserve)
     Nq = length(sc_data.reactive_reserve)
-    L_W_en_min = length(sc_data.W_en_min)
-    L_W_en_max = length(sc_data.W_en_max)
+    L_W_en_min_pr = length(sc_data.W_en_min_pr)
+    L_W_en_min_cs = length(sc_data.W_en_min_cs)
+    L_W_en_max_pr = length(sc_data.W_en_max_pr)
+    L_W_en_max_cs = length(sc_data.W_en_max_cs)
     c_p = data.violation_cost["p_bus_vio_cost"]
     c_q = data.violation_cost["q_bus_vio_cost"]
 
@@ -33,9 +35,11 @@ function scopf_model(
     #variables are indexed j,t,k or j,t (t always second if present)
 
     b_jt_sh = variable(core, L_J_sh, L_T;)
-    #Split e_w_plus into separate sets for W_en_min and W_en_max
-    e_w_plus_min = variable(core, L_W_en_min;)
-    e_w_plus_max = variable(core, L_W_en_max;)
+    #Split e_w_plus into separate sets for W_en_min and W_en_max ad for pr, cs
+    e_w_plus_min_pr = variable(core, L_W_en_min_pr;)
+    e_w_plus_min_cs = variable(core, L_W_en_min_cs;)
+    e_w_plus_max_pr = variable(core, L_W_en_max_pr;)
+    e_w_plus_max_cs = variable(core, L_W_en_max_cs;)
     p_it = variable(core, I, L_T;)
     p_it_plus = variable(core, I, L_T;)
     #splitting p_jt and q_jt for shunts, producers, and consumers
@@ -120,8 +124,10 @@ function scopf_model(
     v_it = variable(core, I, L_T; lvar = v_lvar, uvar = v_uvar) 
 
     #skipping, for now, z_base, z_ctgavg, z_ctgmin, z_t_ctgavg, z_t_ctgmin, z_tk_ctg, z_t_t
-    z_w_en_max = variable(core, L_W_en_max;)
-    z_w_en_min = variable(core, L_W_en_min;)
+    z_w_en_max_pr = variable(core, L_W_en_max_pr;)
+    z_w_en_max_cs = variable(core, L_W_en_max_cs;)
+    z_w_en_min_pr = variable(core, L_W_en_min_pr;)
+    z_w_en_min_cs = variable(core, L_W_en_min_cs;)
     #split z_jt_en and on into pr and cs
     z_jt_en_pr = variable(core, L_J_pr, L_T;)
     z_jt_en_cs = variable(core, L_J_cs, L_T;)
@@ -261,7 +267,48 @@ function scopf_model(
     c47_pr = constraint!(core, c47, pr.n_q + Nq*(pr.t-1) => q_jt_qrd_pr[pr.j_pr, pr.t] for pr in sc_data.qreservesetarray_pr)
     c47_cs = constraint!(core, c47, cs.n_q + Nq*(cs.t-1) => q_jt_qrd_cs[cs.j_cs, cs.t] for cs in sc_data.qreservesetarray_cs)
 
+    #skipping constraints 48-67. Assume unit commitment is always satisfied
+    
+    #4.6.1 Producing and consuming device startup, shutdown, and dispatchable power
+    #p_jt variants are split on pr and cs
+    c68_pr = constraint(core, p_jt_on_pr[pr.j_pr, pr.t] + p_jt_su_pr[pr.j_pr, pr.t] + p_jt_sd_pr[pr.j_pr, pr.t] - p_jt_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c68_cs = constraint(core, p_jt_on_cs[cs.j_cs, cs.t] + p_jt_su_cs[cs.j_cs, cs.t] + p_jt_sd_cs[cs.j_cs, cs.t] - p_jt_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+    c69_pr = constraint(core, p_jt_su_pr[pr.j_pr, pr.t] - pr.sum_T_supc_pr_jt for pr in sc_data.prarray)
+    c69_cs = constraint(core, p_jt_su_cs[cs.j_cs, cs.t] - cs.sum_T_supc_cs_jt for cs in sc_data.csarray)
+    c70_pr = constraint(core, p_jt_sd_pr[pr.j_pr, pr.t] - pr.sum_T_sdpc_pr_jt for pr in sc_data.prarray)
+    c70_cs = constraint(core, p_jt_sd_cs[cs.j_cs, cs.t] - cs.sum_T_sdpc_cs_jt for cs in sc_data.csarray)
+
+    #4.6.2 Ramping limits
+    #p split for pr and cs
+    c71_pr = constraint(core, p_jt_pr[pr.j_pr, pr.t] - pr.p_0 - pr.dt*(pr.p_ru*(pr.u_on-pr.u_su) + pr.p_ru_su*(pr.u_su+1-pr.u_on)) for pr in sc_data.prarray[1:L_J_pr];
+    lcon = fill(-Inf, size(sc_data.prarray[1:L_J_pr])))
+    c71_cs = constraint(core, p_jt_cs[cs.j_cs, cs.t] - cs.p_0 - cs.dt*(cs.p_ru*(cs.u_on-cs.u_su) + cs.p_ru_su*(cs.u_su+1-cs.u_on)) for cs in sc_data.csarray[1:L_J_cs];
+    lcon  = fill(-Inf, size(sc_data.csarray[1:L_J_cs])))
+    c72_pr = constraint(core, p_jt_pr[pr.j_pr, pr.t] - p_jt_pr[pr.j_pr, pr.t-1] - pr.dt*(pr.p_ru*(pr.u_on-pr.u_su) + pr.p_ru_su*(pr.u_su+1-pr.u_on)) for pr in sc_data.prarray[L_J_pr+1:end];
+    lcon = fill(-Inf, size(sc_data.prarray[L_J_pr+1:end])))
+    c72_cs = constraint(core, p_jt_cs[cs.j_cs, cs.t] - p_jt_cs[cs.j_cs, cs.t-1] - cs.dt*(cs.p_ru*(cs.u_on-cs.u_su) + cs.p_ru_su*(cs.u_su+1-cs.u_on)) for cs in sc_data.csarray[L_J_cs+1:end];
+    lcon = fill(-Inf, size(sc_data.csarray[L_J_cs+1:end])))
+    c73_pr = constraint(core, p_jt_pr[pr.j_pr, pr.t] - pr.p_0 + pr.dt*(pr.p_rd*pr.u_on+pr.p_rd_sd*(1-pr.u_on)) for pr in sc_data.prarray[1:L_J_pr];
+    ucon = fill(Inf, size(sc_data.prarray[1:L_J_pr])))
+    c73_cs = constraint(core, p_jt_cs[cs.j_cs, cs.t] - cs.p_0 + cs.dt*(cs.p_rd*cs.u_on+cs.p_rd_sd*(1-cs.u_on)) for cs in sc_data.csarray[1:L_J_cs];
+    ucon = fill(Inf, size(sc_data.csarray[1:L_J_cs])))
+    c74_pr = constraint(core, p_jt_pr[pr.j_pr, pr.t] - p_jt_pr[pr.j_pr, pr.t-1] + pr.dt*(pr.p_rd*pr.u_on+pr.p_rd_sd*(1-pr.u_on)) for pr in sc_data.prarray[L_J_pr+1:end];
+    ucon = fill(Inf, size(sc_data.prarray[L_J_pr+1:end])))
+    c74_cs = constraint(core, p_jt_cs[cs.j_cs, cs.t] - p_jt_cs[cs.j_cs, cs.t-1] + cs.dt*(cs.p_rd*cs.u_on+cs.p_rd_sd*(1-cs.u_on)) for cs in sc_data.csarray[L_J_cs+1:end];
+    ucon = fill(Inf, size(sc_data.csarray[L_J_cs+1:end])))
+
+    #4.6.3 Maximum/minimum energy over multiple intervals
+    #J_pr,cs has been split for pr and cs
+    c75_pr = constraint(core, e_w_plus_max_pr[w.w_en_max_pr_ind] + w.e_max for w in sc_data.W_en_max_pr; ucon = fill(Inf, size(sc_data.W_en_max_pr)))
+    c75_pr_a = constraint!(core, c75_pr, t.w_en_max_pr_ind => -t.dt*p_jt_pr[t.j_pr, t.t] for t in sc_data.T_w_en_max_pr)
+    c75_cs = constraint(core, e_w_plus_max_cs[w.w_en_max_cs_ind] + w.e_max for w in sc_data.W_en_max_cs; ucon = fill(Inf, size(sc_data.W_en_max_cs)))
+    c75_cs_a = constraint!(core, c75_cs, t.w_en_max_cs_ind => -t.dt*p_jt_cs[t.j_cs, t.t] for t in sc_data.T_w_en_max_cs)
+    c76_pr = constraint(core, e_w_plus_min_pr[w.w_en_min_pr_ind] - w.e_min for w in sc_data.W_en_min_pr; lcon = fill(-Inf, size(sc_data.W_en_min_pr)))
+    c76_pr_a = constraint!(core, c76_pr, t.w_en_min_pr_ind => -t.dt*p_jt_pr[t.j_pr, t.t] for t in sc_data.T_w_en_min_pr)
+    c76_cs = constraint(core, e_w_plus_min_cs[w.w_en_min_cs_ind] - w.e_min for w in sc_data.W_en_min_cs; lcon = fill(-Inf, size(sc_data.W_en_min_cs)))
+    c76_cs_a = constraint!(core, c76_cs, t.w_en_min_cs_ind => -t.dt*p_jt_cs[t.j_cs, t.t] for t in sc_data.T_w_en_min_cs)
+
     model = ExaModel(core; kwargs...)
-    return model
+    return model, sc_data
 end
 
