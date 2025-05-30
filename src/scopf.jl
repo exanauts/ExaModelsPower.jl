@@ -25,6 +25,8 @@ function scopf_model(
     L_W_en_max_cs = length(sc_data.W_en_max_cs)
     c_p = data.violation_cost["p_bus_vio_cost"]
     c_q = data.violation_cost["q_bus_vio_cost"]
+    c_s = data.violation_cost["s_vio_cost"]
+    c_e = data.violation_cost["e_vio_cost"]
 
     v_lvar = repeat([b.v_min for b in sc_data.bus], 1, L_T)
     v_uvar = repeat([b.v_max for b in sc_data.bus], 1, L_T)
@@ -36,10 +38,11 @@ function scopf_model(
 
     b_jt_sh = variable(core, L_J_sh, L_T;)
     #Split e_w_plus into separate sets for W_en_min and W_en_max ad for pr, cs
-    e_w_plus_min_pr = variable(core, L_W_en_min_pr;)
-    e_w_plus_min_cs = variable(core, L_W_en_min_cs;)
-    e_w_plus_max_pr = variable(core, L_W_en_max_pr;)
-    e_w_plus_max_cs = variable(core, L_W_en_max_cs;)
+    #Boudns from 4.6.3 Maximum/minimum energy over multiple intervals (77)
+    e_w_plus_min_pr = variable(core, L_W_en_min_pr; lvar = zeros(size(sc_data.W_en_min_pr)))
+    e_w_plus_min_cs = variable(core, L_W_en_min_cs; lvar = zeros(size(sc_data.W_en_min_cs)))
+    e_w_plus_max_pr = variable(core, L_W_en_max_pr; lvar = zeros(size(sc_data.W_en_max_pr)))
+    e_w_plus_max_cs = variable(core, L_W_en_max_cs; lvar = zeros(size(sc_data.W_en_max_cs)))
     p_it = variable(core, I, L_T;)
     p_it_plus = variable(core, I, L_T;)
     #splitting p_jt and q_jt for shunts, producers, and consumers
@@ -72,26 +75,27 @@ function scopf_model(
     q_jt_to_xf = variable(core, L_J_xf, L_T;)
     q_jt_to_dc = variable(core, L_J_dc, L_T;)
     #p_jt rgu, rgd, scr, rru,on, rru,off, rrd,on, rrd,off and q_jt qru/qrd split into pr and cs
-    p_jt_rgu_pr = variable(core, L_J_pr, L_T;)
-    p_jt_rgu_cs = variable(core, L_J_cs, L_T;)
-    p_jt_rgd_pr = variable(core, L_J_pr, L_T;)
-    p_jt_rgd_cs = variable(core, L_J_cs, L_T;)
-    p_jt_scr_pr = variable(core, L_J_pr, L_T;)
-    p_jt_scr_cs = variable(core, L_J_cs, L_T;)
-    p_jt_nsc_pr = variable(core, L_J_pr, L_T;)
-    p_jt_nsc_cs = variable(core, L_J_cs, L_T;)
-    p_jt_rru_on_pr = variable(core, L_J_pr, L_T;)
-    p_jt_rru_on_cs = variable(core, L_J_cs, L_T;)
-    p_jt_rru_off_pr = variable(core, L_J_pr, L_T;)
-    p_jt_rru_off_cs = variable(core, L_J_cs, L_T;)
-    p_jt_rrd_on_pr = variable(core, L_J_pr, L_T;)
-    p_jt_rrd_on_cs = variable(core, L_J_cs, L_T;)
-    p_jt_rrd_off_pr = variable(core, L_J_pr, L_T;)
-    p_jt_rrd_off_cs = variable(core, L_J_cs, L_T;)
-    q_jt_qru_pr = variable(core, L_J_pr, L_T;)
-    q_jt_qru_cs = variable(core, L_J_cs, L_T;)
-    q_jt_qrd_pr = variable(core, L_J_pr, L_T;)
-    q_jt_qrd_cs = variable(core, L_J_cs, L_T;)
+    #bounds from 4.6.4 Device reserve variable domains (80-89)
+    p_jt_rgu_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    p_jt_rgu_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
+    p_jt_rgd_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    p_jt_rgd_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
+    p_jt_scr_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    p_jt_scr_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
+    p_jt_nsc_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    p_jt_nsc_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
+    p_jt_rru_on_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    p_jt_rru_on_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
+    p_jt_rru_off_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    p_jt_rru_off_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
+    p_jt_rrd_on_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    p_jt_rrd_on_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
+    p_jt_rrd_off_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    p_jt_rrd_off_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
+    q_jt_qru_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    q_jt_qru_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
+    q_jt_qrd_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
+    q_jt_qrd_cs = variable(core, L_J_cs, L_T; lvar = zeros(size(sc_data.csarray)))
 
     
     p_nt_rgu_req = variable(core, Np, L_T;)
@@ -307,6 +311,81 @@ function scopf_model(
     c76_pr_a = constraint!(core, c76_pr, t.w_en_min_pr_ind => -t.dt*p_jt_pr[t.j_pr, t.t] for t in sc_data.T_w_en_min_pr)
     c76_cs = constraint(core, e_w_plus_min_cs[w.w_en_min_cs_ind] - w.e_min for w in sc_data.W_en_min_cs; lcon = fill(-Inf, size(sc_data.W_en_min_cs)))
     c76_cs_a = constraint!(core, c76_cs, t.w_en_min_cs_ind => -t.dt*p_jt_cs[t.j_cs, t.t] for t in sc_data.T_w_en_min_cs)
+    c78_pr = constraint(core, z_w_en_max_pr[w.w_en_max_pr_ind] - c_e*e_w_plus_max_pr[w.w_en_max_pr_ind] for w in sc_data.W_en_max_pr)
+    c78_cs = constraint(core, z_w_en_max_cs[w.w_en_max_cs_ind] - c_e*e_w_plus_max_cs[w.w_en_max_cs_ind] for w in sc_data.W_en_max_cs)
+    c79_pr = constraint(core, z_w_en_min_pr[w.w_en_min_pr_ind] - c_e*e_w_plus_min_pr[w.w_en_min_pr_ind] for w in sc_data.W_en_min_pr)
+    c79_cs = constraint(core, z_w_en_min_cs[w.w_en_min_cs_ind] - c_e*e_w_plus_min_cs[w.w_en_min_cs_ind] for w in sc_data.W_en_min_cs)
+
+    #4.6.5 Device reserve costs
+    #p_jt split into pr and cs
+    c90_pr = constraint(core, z_jt_rgu_pr[pr.j_pr, pr.t] - pr.dt*pr.c_rgu*p_jt_rgu_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c90_cs = constraint(core, z_jt_rgu_cs[cs.j_cs, cs.t] - cs.dt*cs.c_rgu*p_jt_rgu_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+    c91_pr = constraint(core, z_jt_rgd_pr[pr.j_pr, pr.t] - pr.dt*pr.c_rgd*p_jt_rgd_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c91_cs = constraint(core, z_jt_rgd_cs[cs.j_cs, cs.t] - cs.dt*cs.c_rgd*p_jt_rgd_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+    c92_pr = constraint(core, z_jt_scr_pr[pr.j_pr, pr.t] - pr.dt*pr.c_scr*p_jt_scr_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c92_cs = constraint(core, z_jt_scr_cs[cs.j_cs, cs.t] - cs.dt*cs.c_scr*p_jt_scr_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+    c93_pr = constraint(core, z_jt_nsc_pr[pr.j_pr, pr.t] - pr.dt*pr.c_nsc*p_jt_nsc_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c93_cs = constraint(core, z_jt_nsc_cs[cs.j_cs, cs.t] - cs.dt*cs.c_nsc*p_jt_nsc_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+    c94_pr = constraint(core, z_jt_rru_pr[pr.j_pr, pr.t] - pr.dt*(pr.c_rru_on*p_jt_rru_on_pr[pr.j_pr, pr.t] + pr.c_rru_off*p_jt_rru_off_pr[pr.j_pr, pr.t]) for pr in sc_data.prarray)
+    c94_cs = constraint(core, z_jt_rru_cs[cs.j_cs, cs.t] - cs.dt*(cs.c_rru_on*p_jt_rru_on_cs[cs.j_cs, cs.t] + cs.c_rru_off*p_jt_rru_off_cs[cs.j_cs, cs.t]) for cs in sc_data.csarray)
+    c95_pr = constraint(core, z_jt_rrd_pr[pr.j_pr, pr.t] - pr.dt*(pr.c_rrd_on*p_jt_rrd_on_pr[pr.j_pr, pr.t] + pr.c_rrd_off*p_jt_rrd_off_pr[pr.j_pr, pr.t]) for pr in sc_data.prarray)
+    c95_cs = constraint(core, z_jt_rrd_cs[cs.j_cs, cs.t] - cs.dt*(cs.c_rrd_on*p_jt_rrd_on_cs[cs.j_cs, cs.t] + cs.c_rrd_off*p_jt_rrd_off_cs[cs.j_cs, cs.t]) for cs in sc_data.csarray)
+    c96_pr = constraint(core, z_jt_qru_pr[pr.j_pr, pr.t] - pr.dt*pr.c_qru*q_jt_qru_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c96_cs = constraint(core, z_jt_qru_cs[cs.j_cs, cs.t] - cs.dt*cs.c_qru*q_jt_qru_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+    c97_pr = constraint(core, z_jt_qrd_pr[pr.j_pr, pr.t] - pr.dt*pr.c_qrd*q_jt_qrd_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c97_cs = constraint(core, z_jt_qrd_cs[cs.j_cs, cs.t] - cs.dt*cs.c_qrd*q_jt_qrd_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+
+    #4.6.6 Absolute reserve limits, based on ramp rates
+    c98_pr = constraint(core, p_jt_rgu_pr[pr.j_pr, pr.t] - pr.p_rgu_max*pr.u_on for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c98_cs = constraint(core, p_jt_rgu_cs[cs.j_cs, cs.t] - cs.p_rgu_max*cs.u_on for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c99_pr = constraint(core, p_jt_rgd_pr[pr.j_pr, pr.t] - pr.p_rgd_max*pr.u_on for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c99_cs = constraint(core, p_jt_rgd_cs[cs.j_cs, cs.t] - cs.p_rgd_max*cs.u_on for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c100_pr = constraint(core, p_jt_rgu_pr[pr.j_pr, pr.t] + p_jt_scr_pr[pr.j_pr, pr.t] - pr.p_scr_max*pr.u_on for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c100_cs = constraint(core, p_jt_rgu_cs[cs.j_cs, cs.t] + p_jt_scr_cs[cs.j_cs, cs.t] - cs.p_scr_max*cs.u_on for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c101_pr = constraint(core, p_jt_nsc_pr[pr.j_pr, pr.t] - pr.p_nsc_max*(1-pr.u_on) for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c101_cs = constraint(core, p_jt_nsc_cs[cs.j_cs, cs.t] - cs.p_nsc_max*(1-cs.u_on) for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c102_pr = constraint(core, p_jt_rgu_pr[pr.j_pr, pr.t] + p_jt_scr_pr[pr.j_pr, pr.t] + p_jt_rru_on_pr[pr.j_pr, pr.t] - pr.p_rru_on_max*pr.u_on for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c102_cs = constraint(core, p_jt_rgu_cs[cs.j_cs, cs.t] + p_jt_scr_cs[cs.j_cs, cs.t] + p_jt_rru_on_cs[cs.j_cs, cs.t] - cs.p_rru_on_max*cs.u_on for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c103_pr = constraint(core, p_jt_nsc_pr[pr.j_pr, pr.t] + p_jt_rru_off_pr[pr.j_pr, pr.t] - pr.p_rru_off_max*(1-pr.u_on) for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c103_cs = constraint(core, p_jt_nsc_cs[cs.j_cs, cs.t] + p_jt_rru_off_cs[cs.j_cs, cs.t] - cs.p_rru_off_max*(1-cs.u_on) for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c104_pr = constraint(core, p_jt_rgd_pr[pr.j_pr, pr.t] + p_jt_rrd_on_pr[pr.j_pr, pr.t] - pr.p_rrd_on_max*pr.u_on for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c104_cs = constraint(core, p_jt_rgd_cs[cs.j_cs, cs.t] + p_jt_rrd_on_cs[cs.j_cs, cs.t] - cs.p_rrd_on_max*cs.u_on for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c105_pr = constraint(core, p_jt_rrd_off_pr[pr.j_pr, pr.t] - pr.p_rrd_off_max*(1-pr.u_on) for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c105_cs = constraint(core, p_jt_rrd_off_cs[cs.j_cs, cs.t] - cs.p_rrd_off_max*(1-cs.u_on) for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    #These constraints could be removed and the variables removed to simplify other constraints. However, they are kept for continuity
+    c106 = constraint(core, p_jt_rrd_off_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c107 = constraint(core, p_jt_nsc_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+    c108 = constraint(core, p_jt_rru_off_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+
+    #4.6.7 Relative reserve limits, based on headroom to max/min, producing devices
+    c109 = constraint(core, p_jt_on_pr[pr.j_pr, pr.t] + p_jt_rgu_pr[pr.j_pr, pr.t] + p_jt_scr_pr[pr.j_pr, pr.t] + p_jt_rru_on_pr[pr.j_pr, pr.t] - pr.p_max*pr.u_on for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c110 = constraint(core, p_jt_on_pr[pr.j_pr, pr.t] - p_jt_rgd_pr[pr.j_pr, pr.t] - p_jt_rrd_on_pr[pr.j_pr, pr.t] - pr.p_min*pr.u_on for pr in sc_data.prarray; ucon = fill(Inf, size(sc_data.prarray)))
+    c111 = constraint(core, p_jt_su_pr[pr.j_pr, pr.t] + p_jt_sd_pr[pr.j_pr, pr.t] + p_jt_nsc_pr[pr.j_pr, pr.t] + p_jt_rru_off_pr[pr.j_pr, pr.t] - pr.p_max*(1-pr.u_on) for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c112 = constraint(core, q_jt_pr[pr.j_pr, pr.t] + q_jt_qru_pr[pr.j_pr, pr.t] - pr.q_max*(pr.u_on + pr.sum2_T_supc_pr_jt + pr.sum2_T_supc_pr_jt) for pr in sc_data.prarray; lcon = fill(-Inf, size(sc_data.prarray)))
+    c113 = constraint(core, q_jt_pr[pr.j_pr, pr.t] - q_jt_qrd_pr[pr.j_pr, pr.t] - pr.q_min*(pr.u_on + pr.sum2_T_supc_pr_jt + pr.sum2_T_supc_pr_jt) for pr in sc_data.prarray; ucon = fill(Inf, size(sc_data.prarray)))
+
+    c114 = constraint(core, q_jt_pr[pr.j_pr, pr.t] + q_jt_qru_pr[pr.j_pr, pr.t] - pr.q_max_p0*(pr.u_on + pr.sum2_T_supc_pr_jt + pr.sum2_T_sdpc_pr_jt) - pr.beta_max*p_jt_pr[pr.j_pr, pr.t] for pr in sc_data.prarray_pqbounds;
+    lcon = fill(-Inf, size(sc_data.prarray_pqbounds)))
+    c115 = constraint(core, q_jt_pr[pr.j_pr, pr.t] - q_jt_qrd_pr[pr.j_pr, pr.t] - pr.q_min_p0*(pr.u_on + pr.sum2_T_supc_pr_jt + pr.sum2_T_sdpc_pr_jt) - pr.beta_min*p_jt_pr[pr.j_pr, pr.t] for pr in sc_data.prarray_pqbounds;
+    ucon = fill(Inf, size(sc_data.prarray_pqbounds)))
+    c116 = constraint(core, q_jt_pr[pr.j_pr, pr.t] - pr.q_p0*(pr.u_on + pr.sum2_T_supc_pr_jt + pr.sum2_T_sdpc_pr_jt) - pr.beta*p_jt_pr[pr.j_pr, pr.t] for pr in sc_data.prarray_pqe)
+    c117 = constraint(core, q_jt_qru_pr[pr.j_pr, pr.t] for pr in sc_data.prarray_pqe)
+    c118 = constraint(core, q_jt_qrd_pr[pr.j_pr, pr.t] for pr in sc_data.prarray_pqe)
+
+    #4.6.8 Relative reserve limits, based on headroom to max/min, consuming devices
+    c119 = constraint(core, p_jt_on_cs[cs.j_cs, cs.t] + p_jt_rgd_cs[cs.j_cs, cs.t] + p_jt_rrd_on_cs[cs.j_cs, cs.t] - cs.p_max*cs.u_on for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c120 = constraint(core, p_jt_on_cs[cs.j_cs, cs.t] - p_jt_rgu_cs[cs.j_cs, cs.t] - p_jt_scr_cs[cs.j_cs, cs.t] - p_jt_rru_on_cs[cs.j_cs, cs.t] -cs.p_min*cs.u_on for cs in sc_data.csarray; ucon = fill(Inf, size(sc_data.csarray)))
+    c121 = constraint(core, p_jt_su_cs[cs.j_cs, cs.t] + p_jt_sd_cs[cs.j_cs, cs.t] + p_jt_rrd_off_cs[cs.j_cs, cs.t] - cs.p_max*(1-cs.u_on) for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c122 = constraint(core, q_jt_cs[cs.j_cs, cs.t] + q_jt_qrd_cs[cs.j_cs, cs.t] - cs.q_max*(cs.u_on + cs.sum2_T_supc_cs_jt + cs.sum2_T_sdpc_cs_jt) for cs in sc_data.csarray; lcon = fill(-Inf, size(sc_data.csarray)))
+    c123 = constraint(core, q_jt_cs[cs.j_cs, cs.t] - q_jt_qru_cs[cs.j_cs, cs.t] - cs.q_min*(cs.u_on + cs.sum2_T_supc_cs_jt + cs.sum2_T_sdpc_cs_jt) for cs in sc_data.csarray; ucon = fill(Inf, size(sc_data.csarray)))
+    c124 = constraint(core, q_jt_cs[cs.j_cs, cs.t] + q_jt_qrd_cs[cs.j_cs, cs.t] - cs.q_max_p0*(cs.u_on + cs.sum2_T_supc_cs_jt + cs.sum2_T_sdpc_cs_jt) - cs.beta_max*p_jt_cs[cs.j_cs, cs.t] for cs in sc_data.csarray_pqbounds; lcon = fill(-Inf, size(sc_data.csarray_pqbounds)))
+    c125 = constraint(core, q_jt_cs[cs.j_cs, cs.t] - q_jt_qru_cs[cs.j_cs, cs.t] - cs.q_min_p0*(cs.u_on + cs.sum2_T_supc_cs_jt + cs.sum2_T_sdpc_cs_jt) - cs.beta_min*p_jt_cs[cs.j_cs, cs.t] for cs in sc_data.csarray_pqbounds; ucon = fill(Inf, size(sc_data.csarray_pqbounds)))
+    c126 = constraint(core, q_jt_cs[cs.j_cs, cs.t] - cs.q_p0*(cs.u_on + cs.sum2_T_supc_cs_jt + cs.sum2_T_sdpc_cs_jt) - cs.beta*p_jt_cs[cs.j_cs, cs.t] for cs in sc_data.csarray_pqe)
+    c127 = constraint(core, q_jt_qru_cs[cs.j_cs, cs.t] for cs in sc_data.csarray_pqe)
+    c128 = constraint(core, q_jt_qrd_cs[cs.j_cs, cs.t] for cs in sc_data.csarray_pqe)
+
+
+
 
     model = ExaModel(core; kwargs...)
     return model, sc_data

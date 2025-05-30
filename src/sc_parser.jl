@@ -248,11 +248,15 @@ function parse_sc_data_static(data)
                     p_rrd_off_max = val["p_ramp_res_down_offline_ub"]
                     p_0 = val["initial_status"]["p"]
                     q_0 = val["initial_status"]["q"]
+                    p_max = convert(Vector{Float64}, ts_val["p_ub"])
+                    p_min = convert(Vector{Float64}, ts_val["p_lb"])
+                    q_max = convert(Vector{Float64}, ts_val["q_ub"])
+                    q_min = convert(Vector{Float64}, ts_val["q_lb"])
                     
                     (j = j, j_prcs = j_prcs, j_pr = j_pr, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
                     c_rgu = c_rgu, c_rgd = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
-                    p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0)
+                    p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0, p_max=p_max, p_min=p_min, q_max=q_max, q_min=q_min)
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "producer"
             ], by = x -> x.j),
         
@@ -294,11 +298,15 @@ function parse_sc_data_static(data)
                     p_rrd_off_max = val["p_ramp_res_down_offline_ub"]
                     p_0 = val["initial_status"]["p"]
                     q_0 = val["initial_status"]["q"]
+                    p_max = convert(Vector{Float64}, ts_val["p_ub"])
+                    p_min = convert(Vector{Float64}, ts_val["p_lb"])
+                    q_max = convert(Vector{Float64}, ts_val["q_ub"])
+                    q_min = convert(Vector{Float64}, ts_val["q_lb"])
 
                     (j = j, j_prcs = j_prcs, j_cs = j_cs, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
                     c_rgu = c_rgu, c_rgd = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
-                    p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0)                
+                    p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0, p_max=p_max, p_min=p_min, q_max=q_max, q_min=q_min)                
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "consumer"
             ]
         , by = x -> x.j),
@@ -440,7 +448,7 @@ function parse_sc_data_static(data)
             for m in 1:length(data.sdd_ts_lookup[key]["cost"][t])
         ], 
 
-        dt = data.dt,
+        dt = Float64.(data.dt)
         
     
     )
@@ -532,10 +540,14 @@ function parse_sc_data(data, uc_data)
         if val["uid"] == uc["uid"]
         ]
     
-    #This sum corresponds to constraint 69
+    #This sum corresponds to constraint 69 (summing p_supc*u_su)
     sum_T_supc_pr = zeros(L_J_pr, length(periods))
+    #This sum corresponds to constraint 112/113 (summing u_su)
+    sum2_T_supc_pr = zeros(L_J_pr, length(periods))
+
     for b in T_supc_pr
         sum_T_supc_pr[b.j_pr, b.t] += b.p_supc*b.u_su
+        sum2_T_supc_pr[b.j_pr, b.t] += b.u_su
     end
 
     T_supc_cs = [
@@ -555,10 +567,13 @@ function parse_sc_data(data, uc_data)
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
         if val["uid"] == uc["uid"]
         ]
-    #This sum corresponds to constraint 69
+    #This sum corresponds to constraint 69 (p_supc*u_su)
     sum_T_supc_cs = zeros(L_J_cs, length(periods))
+    #This sum corresponds to constraints 122-126 (u_su)
+    sum2_T_supc_cs = zeros(L_J_cs, length(periods))
     for b in T_supc_cs
         sum_T_supc_cs[b.j_cs, b.t] += b.p_supc*b.u_su
+        sum2_T_supc_cs[b.j_cs, b.t] += b.u_su
     end
 
     T_sdpc_pr = [
@@ -578,10 +593,14 @@ function parse_sc_data(data, uc_data)
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
         if val["uid"] == uc["uid"]
         ]
-    #This sum corresponds to constraint 70
+    #This sum corresponds to constraint 70 (summing p_sdpc*u_sd)
     sum_T_sdpc_pr = zeros(L_J_pr, length(periods))
+
+    #This sum corresponds to constraints 112 and 113 (summing u_sd)
+    sum2_T_sdpc_pr = zeros(L_J_pr, length(periods))
     for b in T_sdpc_pr
         sum_T_sdpc_pr[b.j_pr, b.t] += b.p_sdpc*b.u_sd
+        sum2_T_sdpc_pr[b.j_pr, b.t] += b.u_sd
     end
 
     T_sdpc_cs = [
@@ -601,10 +620,13 @@ function parse_sc_data(data, uc_data)
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
         if val["uid"] == uc["uid"]
         ]
-    #This sum corresponds to constraint 70
+    #This sum corresponds to constraint 70 (p_sdpc*u_sd)
     sum_T_sdpc_cs = zeros(L_J_cs, length(periods))
+    #This sum corresponds to constraint 122-126 (u_sd)
+    sum2_T_sdpc_cs = zeros(L_J_cs, length(periods))
     for b in T_sdpc_cs
         sum_T_sdpc_cs[b.j_cs, b.t] += b.p_sdpc*b.u_sd
+        sum2_T_sdpc_cs[b.j_cs, b.t] += b.u_sd
     end
     
 
@@ -787,9 +809,45 @@ function parse_sc_data(data, uc_data)
         p_ru_su=p.p_ru_su, p_rd_sd=p.p_rd_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
         c_rru_off=p.c_rru_off[t], c_rrd_on=p.c_rrd_on[t], c_rrd_off=p.c_rrd_off[t], c_qru=p.c_qru[t], c_qrd=p.c_qrd[t], p_rgu_max=p.p_rgu_max,
         p_rgd_max=p.p_rgd_max, p_scr_max=p.p_scr_max, p_nsc_max=p.p_nsc_max, p_rru_on_max=p.p_rru_on_max, p_rru_off_max=p.p_rru_off_max, 
-        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
-        sum_T_supc_pr_jt = sum_T_supc_pr[p.j_pr, t], sum_T_sdpc_pr_jt = sum_T_sdpc_pr[p.j_pr, t], dt = sc_data.dt[t])
+        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t], u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
+        sum_T_supc_pr_jt = sum_T_supc_pr[p.j_pr, t], sum_T_sdpc_pr_jt = sum_T_sdpc_pr[p.j_pr, t], sum2_T_supc_pr_jt=sum2_T_supc_pr[p.j_pr, t], sum2_T_sdpc_pr_jt=sum2_T_sdpc_pr[p.j_pr, t], dt = sc_data.dt[t])
         for p in sc_data.prod, t in periods
+        for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
+        if p.uid == uc["uid"]],
+
+        prarray_pqbounds = isempty(val for val in values(data.sdd_lookup) if parse(Int, match(r"\d+", val["uid"]).match) < L_J_pr && val["q_bound_cap"]==1) ? 
+                            empty_data = Vector{NamedTuple{(:j, :jprcs, :j_pr, :u_on, :sum2_T_supc_pr_jt, :sum2_T_sdpc_pr_jt, :beta_max, :beta_min, :q_max_p0, :q_min_p0, :t), Tuple{Int64, Int64, Int64, Int64, Int64, Int64, Float64, Float64, Float64, Float64, Int64}}}() : [
+                            (;j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
+                            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+                            j_pr = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+                            u_on = uc["on_status"][t],
+                            sum2_T_supc_pr_jt=sum2_T_supc_pr[p.j_pr, t], 
+                            sum2_T_sdpc_pr_jt=sum2_T_sdpc_pr[p.j_pr, t], 
+                            beta_max = val["beta_ub"],
+                            beta_min = val["beta_lb"],
+                            q_max_p0 = val["q_0_ub"],
+                            q_min_p0 = val["q_0_lb"],
+                            t=t
+        )
+        for val in values(data.sdd_lookup), t in periods
+        if parse(Int, match(r"\d+", val["uid"]).match) < L_J_pr && val["q_bound_cap"]==1
+        for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
+        if p.uid == uc["uid"]],
+
+        prarray_pqe = isempty(val for val in values(data.sdd_lookup) if parse(Int, match(r"\d+", val["uid"]).match) < L_J_pr && val["q_bound_cap"]==1) ? 
+                            empty_data = Vector{NamedTuple{(:j, :jprcs, :j_pr, :u_on, :sum2_T_supc_pr_jt, :sum2_T_sdpc_pr_jt, :beta, :q_p0, :t), Tuple{Int64, Int64, Int64, Int64, Int64, Int64, Float64, Float64, Int64}}}() : [
+                            (;j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
+                            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+                            j_pr = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+                            u_on = uc["on_status"][t],
+                            sum2_T_supc_pr_jt=sum2_T_supc_pr[p.j_pr, t], 
+                            sum2_T_sdpc_pr_jt=sum2_T_sdpc_pr[p.j_pr, t], 
+                            beta = val["beta"],
+                            q_p0 = val["q_0"],
+                            t=t
+        )
+        for val in values(data.sdd_lookup), t in periods
+        if parse(Int, match(r"\d+", val["uid"]).match) < L_J_pr && val["q_linear_cap"]==1
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
         if p.uid == uc["uid"]],
 
@@ -797,9 +855,45 @@ function parse_sc_data(data, uc_data)
         p_ru_su=p.p_ru_su, p_rd_sd=p.p_rd_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
         c_rru_off=p.c_rru_off[t], c_rrd_on=p.c_rrd_on[t], c_rrd_off=p.c_rrd_off[t], c_qru=p.c_qru[t], c_qrd=p.c_qrd[t], p_rgu_max=p.p_rgu_max,
         p_rgd_max=p.p_rgd_max, p_scr_max=p.p_scr_max, p_nsc_max=p.p_nsc_max, p_rru_on_max=p.p_rru_on_max, p_rru_off_max=p.p_rru_off_max, 
-        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
-        sum_T_supc_cs_jt = sum_T_supc_cs[p.j_cs, t], sum_T_sdpc_cs_jt = sum_T_sdpc_cs[p.j_cs, t], dt = sc_data.dt[t])
+        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t], u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
+        sum_T_supc_cs_jt = sum_T_supc_cs[p.j_cs, t], sum_T_sdpc_cs_jt = sum_T_sdpc_cs[p.j_cs, t], sum2_T_supc_cs_jt = sum2_T_supc_cs[p.j_cs, t], sum2_T_sdpc_cs_jt = sum2_T_sdpc_cs[p.j_cs, t], dt = sc_data.dt[t])
         for p in sc_data.cons, t in periods
+        for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
+        if p.uid == uc["uid"]],
+
+        csarray_pqbounds = isempty(val for val in values(data.sdd_lookup) if parse(Int, match(r"\d+", val["uid"]).match) < L_J_pr && val["q_bound_cap"]==1) ? 
+                            empty_data = Vector{NamedTuple{(:j, :jprcs, :j_cs, :u_on, :sum2_T_supc_cs_jt, :sum2_T_sdpc_cs_jt, :beta_max, :beta_min, :q_max_p0, :q_min_p0, :t), Tuple{Int64, Int64, Int64, Int64, Int64, Int64, Float64, Float64, Float64, Float64, Int64}}}() : [
+                            (;j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
+                            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+                            j_cs = parse(Int, match(r"\d+", val["uid"]).match) + 1 - L_J_pr,
+                            u_on = uc["on_status"][t],
+                            sum2_T_supc_cs_jt=sum2_T_supc_cs[p.j_cs, t], 
+                            sum2_T_sdpc_cs_jt=sum2_T_sdpc_cs[p.j_cs, t], 
+                            beta_max = val["beta_ub"],
+                            beta_min = val["beta_lb"],
+                            q_max_p0 = val["q_0_ub"],
+                            q_min_p0 = val["q_0_lb"],
+                            t=t
+        )
+        for val in values(data.sdd_lookup), t in periods
+        if parse(Int, match(r"\d+", val["uid"]).match) >= L_J_pr && val["q_bound_cap"]==1
+        for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
+        if p.uid == uc["uid"]],
+
+        csarray_pqe = isempty(val for val in values(data.sdd_lookup) if parse(Int, match(r"\d+", val["uid"]).match) < L_J_pr && val["q_bound_cap"]==1) ? 
+                            empty_data = Vector{NamedTuple{(:j, :jprcs, :j_cs, :u_on, :sum2_T_supc_cs_jt, :sum2_T_sdpc_cs_jt, :beta, :q_p0, :t), Tuple{Int64, Int64, Int64, Int64, Int64, Int64, Float64, Float64, Int64}}}() : [
+                            (;j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
+                            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+                            j_cs = parse(Int, match(r"\d+", val["uid"]).match) + 1 - L_J_pr,
+                            u_on = uc["on_status"][t],
+                            sum2_T_supc_cs_jt=sum2_T_supc_cs[p.j_cs, t], 
+                            sum2_T_sdpc_cs_jt=sum2_T_sdpc_cs[p.j_cs, t], 
+                            beta = val["beta"],
+                            q_p0 = val["q_0"],
+                            t=t
+        )
+        for val in values(data.sdd_lookup), t in periods
+        if parse(Int, match(r"\d+", val["uid"]).match) >= L_J_pr && val["q_linear_cap"]==1
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
         if p.uid == uc["uid"]],
 
