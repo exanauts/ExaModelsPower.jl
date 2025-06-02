@@ -32,7 +32,7 @@ function parse_sc_data_static(data)
 
     ε_time = 1e-6
 
-    cost_vector = sort(vcat(
+    cost_vector_pr = sort(
             #producers
             [
                 begin
@@ -46,8 +46,10 @@ function parse_sc_data_static(data)
                     (j = j, j_prcs = j_prcs, j_pr = j_pr, bus=bus, uid = uid, cost=cost)
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "producer"
                 
-            ],
+            ], by = x -> x.j)
+
             #Consumers
+    cost_vector_cs = sort(
             [
                 begin
                     ts_val = data.sdd_ts_lookup[key]
@@ -59,8 +61,7 @@ function parse_sc_data_static(data)
                     cost = ts_val["cost"]
                     (j = j, j_prcs = j_prcs, j_cs = j_cs, bus=bus, uid = uid, cost=cost)
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "consumer"
-            ]
-        ), by = x -> x.j)
+            ], by = x -> x.j)
 
     
     sc_data = (
@@ -157,11 +158,12 @@ function parse_sc_data_static(data)
         #Variable phase difference
         vpd = isempty(val for val in values(data.twt_lookup) if val["ta_lb"] < val["ta_ub"]) ? empty_data = Vector{NamedTuple{(:j,), Tuple{Int64}}}() : sort([
             begin
+                j_xf = parse(Int, match(r"\d+", val["uid"]).match)+1
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
                 phi_min = val["ta_lb"]
                 phi_max = val["ta_ub"]
-                (j = j, j_ac = j_ac, phi_min = phi_min, phi_max = phi_max)
+                (j = j, j_ac = j_ac, j_xf=j_xf, phi_min = phi_min, phi_max = phi_max)
             end for val in values(data.twt_lookup) if val["ta_lb"] < val["ta_ub"]
         ], by = x -> x.j),
         #Fixed phase difference
@@ -169,8 +171,9 @@ function parse_sc_data_static(data)
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
+                j_xf = parse(Int, match(r"\d+", val["uid"]).match)+1
                 phi_o = val["initial_status"]["ta"]
-                (j = j, j_ac = j_ac, phi_o = phi_o)
+                (j = j, j_ac = j_ac, j_xf=j_xf, phi_o = phi_o)
             end for val in values(data.twt_lookup) if val["ta_lb"] >= val["ta_ub"]
         ], by = x -> x.j),
         #Variable winding ratio
@@ -178,9 +181,10 @@ function parse_sc_data_static(data)
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
+                j_xf = parse(Int, match(r"\d+", val["uid"]).match)+1
                 tau_min = val["tm_lb"]
                 tau_max = val["tm_ub"]
-                (j=j, j_ac=j_ac, tau_min=tau_min, tau_max=tau_max)
+                (j=j, j_ac=j_ac, j_xf=j_xf, tau_min=tau_min, tau_max=tau_max)
             end for val in values(data.twt_lookup) if val["tm_lb"] < val["tm_ub"]
         ], by = x -> x.j),
         #Fixed winding ratio
@@ -188,8 +192,9 @@ function parse_sc_data_static(data)
             begin
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_ln+1
                 j_ac = j
+                j_xf = parse(Int, match(r"\d+", val["uid"]).match)+1
                 tau_o = val["initial_status"]["tm"]
-                (j=j, j_ac=j_ac, tau_o=tau_o)
+                (j=j, j_ac=j_ac, j_xf=j_xf, tau_o=tau_o)
             end for val in values(data.twt_lookup) if val["tm_lb"] >= val["tm_ub"]
 
         ], by = x -> x.j),
@@ -452,7 +457,7 @@ function parse_sc_data_static(data)
         
     
     )
-    return sc_data, lengths, cost_vector
+    return sc_data, lengths, cost_vector_pr, cost_vector_cs
 end
 
 function add_status_flags(uc_data, data)
@@ -497,7 +502,7 @@ function get_as(dt, t)
 end
 
 function parse_sc_data(data, uc_data)
-    sc_data, lengths, cost_vector = parse_sc_data_static(data)
+    sc_data, lengths, cost_vector_pr, cost_vector_cs = parse_sc_data_static(data)
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
     L_J_pr, L_J_cspr, L_J_sh) = lengths
     periods = data.periods
@@ -631,10 +636,10 @@ function parse_sc_data(data, uc_data)
     
 
 
-    empty_vpd = Vector{NamedTuple{(:j, :j_ac, :phi_min, :phi_max, :t), Tuple{Int64, Int64, Float64, Float64, Int64}}}()
-    empty_fpd = Vector{NamedTuple{(:j, :j_ac, :phi_o, :t), Tuple{Int64, Int64, Float64, Int64}}}()
-    empty_vwr = Vector{NamedTuple{(:j, :j_ac, :tau_min, :tau_max, :t), Tuple{Int64, Int64, Float64, Float64, Int64}}}()
-    empty_fwr = Vector{NamedTuple{(:j, :j_ac, :tau_o, :t), Tuple{Int64, Int64, Float64, Int64}}}()
+    empty_vpd = Vector{NamedTuple{(:j, :j_ac, :j_xf, :phi_min, :phi_max, :t), Tuple{Int64, Int64, Int64, Float64, Float64, Int64}}}()
+    empty_fpd = Vector{NamedTuple{(:j, :j_ac, :j_xf, :phi_o, :t), Tuple{Int64, Int64, Int64, Float64, Int64}}}()
+    empty_vwr = Vector{NamedTuple{(:j, :j_ac, :j_xf, :tau_min, :tau_max, :t), Tuple{Int64, Int64, Int64, Float64, Float64, Int64}}}()
+    empty_fwr = Vector{NamedTuple{(:j, :j_ac, :j_xf, :tau_o, :t), Tuple{Int64, Int64, Int64, Float64, Int64}}}()
 
     W_en_max_pr = Vector{@NamedTuple{w_en_max_pr_ind::Int, j::Int, j_prcs::Int, j_pr::Int, a_en_max_start::Float64, a_en_max_end::Float64, e_max::Float64}}()
     w_en_max_pr_ind = 1
@@ -770,15 +775,31 @@ function parse_sc_data(data, uc_data)
         end
     end
 
-    flattened_prcs = Vector{@NamedTuple{flat_k::Int, j::Int, j_prcs::Int, t::Int, m::Int, c_en::Float64, p_max::Float64}}()
+    p_jtm_flattened_pr = Vector{@NamedTuple{flat_k::Int, j::Int, j_prcs::Int, j_pr::Int, t::Int, m::Int, c_en::Float64, p_max::Float64}}()
     flat_k=1
-    for (pc_idx, pc) in pairs(cost_vector)
+    for (pc_idx, pc) in pairs(cost_vector_pr)
         j=pc.j
         j_prcs=pc.j_prcs
+        j_pr = pc.j_pr
         for (t, cost_t) in enumerate(pc.cost)
             for (m, cost_tm) in enumerate(cost_t)
                 c_en, p_max = cost_tm
-                push!(flattened_prcs, (flat_k=flat_k, j=j, j_prcs=j_prcs, t=t, m=m, c_en=c_en, p_max=p_max))
+                push!(p_jtm_flattened_pr, (flat_k=flat_k, j=j, j_prcs=j_prcs, j_pr=j_pr, t=t, m=m, c_en=c_en, p_max=p_max))
+                flat_k+=1
+            end
+        end
+    end
+
+    p_jtm_flattened_cs = Vector{@NamedTuple{flat_k::Int, j::Int, j_prcs::Int, j_cs::Int, t::Int, m::Int, c_en::Float64, p_max::Float64}}()
+    flat_k=1
+    for (pc_idx, pc) in pairs(cost_vector_cs)
+        j=pc.j
+        j_prcs=pc.j_prcs
+        j_cs = pc.j_cs
+        for (t, cost_t) in enumerate(pc.cost)
+            for (m, cost_tm) in enumerate(cost_t)
+                c_en, p_max = cost_tm
+                push!(p_jtm_flattened_cs, (flat_k=flat_k, j=j, j_prcs=j_prcs, j_cs=j_cs, t=t, m=m, c_en=c_en, p_max=p_max))
                 flat_k+=1
             end
         end
@@ -899,14 +920,14 @@ function parse_sc_data(data, uc_data)
 
         acxbrancharray = [
             (;j=b.j, j_ac=b.j_ac, j_xf=b.j_xf, uid=b.uid, to_bus=b.to_bus, fr_bus=b.fr_bus, c_su=b.c_su, c_sd=b.c_sd, s_max=b.s_max, g_sr=b.g_sr, b_sr=b.b_sr, b_ch=b.b_ch,
-            g_fr=b.g_fr, g_to=b.g_to, b_fr=b.b_fr, b_to=b.b_to, u_on=uc["on_status"][t], u_su=uc["su_status"][t], u_sd=uc["sd_status"][t], t=t)
+            g_fr=b.g_fr, g_to=b.g_to, b_fr=b.b_fr, b_to=b.b_to, u_on=uc["on_status"][t], u_su=uc["su_status"][t], u_sd=uc["sd_status"][t], t=t, dt = sc_data.dt[t])
             for b in sc_data.acx_branch, t in periods
             for uc in uc_data["time_series_output"]["two_winding_transformer"]
             if b.uid == uc["uid"]],
 
         aclbrancharray = [
             (;j=b.j, j_ac=b.j_ac, j_ln=b.j_ln, uid=b.uid, to_bus=b.to_bus, fr_bus=b.fr_bus, c_su=b.c_su, c_sd=b.c_sd, s_max=b.s_max, g_sr=b.g_sr, b_sr=b.b_sr, b_ch=b.b_ch,
-            g_fr=b.g_fr, g_to=b.g_to, b_fr=b.b_fr, b_to=b.b_to, u_on=uc["on_status"][t], u_su=uc["su_status"][t], u_sd=uc["sd_status"][t], t=t)
+            g_fr=b.g_fr, g_to=b.g_to, b_fr=b.b_fr, b_to=b.b_to, u_on=uc["on_status"][t], u_su=uc["su_status"][t], u_sd=uc["sd_status"][t], t=t, dt = sc_data.dt[t])
             for b in sc_data.acl_branch, t in periods
             for uc in uc_data["time_series_output"]["ac_line"]
             if b.uid == uc["uid"]],
@@ -920,7 +941,8 @@ function parse_sc_data(data, uc_data)
         preservesetarray_cs = [(;b..., t=t) for b in sc_data.active_reserve_set_cs, t in periods],
         qreservesetarray_pr = [(;b..., t=t) for b in sc_data.reactive_reserve_set_pr, t in periods],
         qreservesetarray_cs = [(;b..., t=t) for b in sc_data.reactive_reserve_set_cs, t in periods],
-        prcsflattened=flattened_prcs,
+        p_jtm_flattened_pr=p_jtm_flattened_pr,
+        p_jtm_flattened_cs=p_jtm_flattened_cs,
         W_en_max_pr=W_en_max_pr,
         W_en_max_cs=W_en_max_cs,
         T_w_en_max_pr=T_w_en_max_pr,

@@ -30,6 +30,9 @@ function scopf_model(
 
     v_lvar = repeat([b.v_min for b in sc_data.bus], 1, L_T)
     v_uvar = repeat([b.v_max for b in sc_data.bus], 1, L_T)
+    p_jtm_pr_uvar = [b.p_max for b in sc_data.p_jtm_flattened_pr]
+    p_jtm_cs_uvar = [b.p_max for b in sc_data.p_jtm_flattened_cs]
+    
     sc_data = convert_data(sc_data, backend)
 
     core = ExaCore(T; backend =backend)
@@ -37,6 +40,7 @@ function scopf_model(
     #variables are indexed j,t,k or j,t (t always second if present)
 
     b_jt_sh = variable(core, L_J_sh, L_T;)
+    g_jt_sh = variable(core, L_J_sh, L_T;)
     #Split e_w_plus into separate sets for W_en_min and W_en_max ad for pr, cs
     #Boudns from 4.6.3 Maximum/minimum energy over multiple intervals (77)
     e_w_plus_min_pr = variable(core, L_W_en_min_pr; lvar = zeros(size(sc_data.W_en_min_pr)))
@@ -60,20 +64,23 @@ function scopf_model(
     p_jt_sd_pr = variable(core, L_J_pr, L_T;)
     p_jt_sd_cs = variable(core, L_J_cs, L_T;)
     #p_jtm has been flattened and uses only one special index, k_flat
-    p_jtm = variable(core, length(sc_data.prcsflattened);)
+    #Bounds from 4.6.9 Energy cost and value (129)
+    p_jtm_pr = variable(core, length(sc_data.p_jtm_flattened_pr); lvar = zeros(size(sc_data.p_jtm_flattened_pr)), uvar = p_jtm_pr_uvar)
+    p_jtm_cs = variable(core, length(sc_data.p_jtm_flattened_cs); lvar = zeros(size(sc_data.p_jtm_flattened_cs)), uvar = p_jtm_cs_uvar)
     #to/from power split into ln, xf, and dc lines
+    #Bounds from 4.8.4 DC lines (152-155)
     p_jt_fr_ln = variable(core, L_J_ln, L_T;)
     p_jt_fr_xf = variable(core, L_J_xf, L_T;)
-    p_jt_fr_dc = variable(core, L_J_dc, L_T;)
+    p_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = [-dc.pdc_max for dc in sc_data.dclinearray], uvar = [dc.pdc_max for dc in sc_data.dclinearray])
     p_jt_to_ln = variable(core, L_J_ln, L_T;)
     p_jt_to_xf = variable(core, L_J_xf, L_T;)
-    p_jt_to_dc = variable(core, L_J_dc, L_T;)
+    p_jt_to_dc = variable(core, L_J_dc, L_T; lvar = [-dc.pdc_max for dc in sc_data.dclinearray], uvar = [dc.pdc_max for dc in sc_data.dclinearray])
     q_jt_fr_ln = variable(core, L_J_ln, L_T;)
     q_jt_fr_xf = variable(core, L_J_xf, L_T;)
-    q_jt_fr_dc = variable(core, L_J_dc, L_T;)
+    q_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = [dc.qdc_fr_min for dc in sc_data.dclinearray], uvar = [dc.qdc_fr_max for dc in sc_data.dclinearray])
     q_jt_to_ln = variable(core, L_J_ln, L_T;)
     q_jt_to_xf = variable(core, L_J_xf, L_T;)
-    q_jt_to_dc = variable(core, L_J_dc, L_T;)
+    q_jt_to_dc = variable(core, L_J_dc, L_T; lvar = [dc.qdc_to_min for dc in sc_data.dclinearray], uvar = [dc.qdc_to_max for dc in sc_data.dclinearray])
     #p_jt rgu, rgd, scr, rru,on, rru,off, rrd,on, rrd,off and q_jt qru/qrd split into pr and cs
     #bounds from 4.6.4 Device reserve variable domains (80-89)
     p_jt_rgu_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
@@ -105,14 +112,14 @@ function scopf_model(
 
     p_jt_pr_max = variable(core, L_T;)
     #Bounds from 4.3.1 Reserve shortfall domains (20-27)
-    p_nt_rgu_plus = variable(core, Np, L_T; lvar = zeros(size(sc_data.preservearray)))
-    p_nt_rgd_plus = variable(core, Np, L_T; lvar = zeros(size(sc_data.preservearray)))
-    p_nt_scr_plus = variable(core, Np, L_T; lvar = zeros(size(sc_data.preservearray)))
-    p_nt_nsc_plus = variable(core, Np, L_T; lvar = zeros(size(sc_data.preservearray)))
-    p_nt_rru_plus = variable(core, Np, L_T; lvar = zeros(size(sc_data.preservearray)))
-    p_nt_rrd_plus = variable(core, Np, L_T; lvar = zeros(size(sc_data.preservearray)))
-    q_nt_qru_plus = variable(core, Nq, L_T; lvar = zeros(size(sc_data.qreservearray)))
-    q_nt_qrd_plus = variable(core, Nq, L_T; lvar = zeros(size(sc_data.qreservearray)))
+    p_nt_rgu_plus = variable(core, Np, L_T; lvar = zeros(Np, L_T))
+    p_nt_rgd_plus = variable(core, Np, L_T; lvar = zeros(Np, L_T))
+    p_nt_scr_plus = variable(core, Np, L_T; lvar = zeros(Np, L_T))
+    p_nt_nsc_plus = variable(core, Np, L_T; lvar = zeros(Np, L_T))
+    p_nt_rru_plus = variable(core, Np, L_T; lvar = zeros(Np, L_T))
+    p_nt_rrd_plus = variable(core, Np, L_T; lvar = zeros(Np, L_T))
+    q_nt_qru_plus = variable(core, Nq, L_T; lvar = zeros(Nq, L_T))
+    q_nt_qrd_plus = variable(core, Nq, L_T; lvar = zeros(Nq, L_T))
 
     p_t_sl = variable(core, L_T;)
 
@@ -120,8 +127,9 @@ function scopf_model(
     q_it_plus = variable(core, I, L_T;)
 
     #s_jt_plus split on ln and xf
-    s_jt_plus_ln = variable(core, L_J_ln, L_T;)
-    s_jt_lus_xf = variable(core, L_J_xf, L_T;)
+    #Bounds from 4.8.1 AC branch flow limits and penalties (138)
+    s_jt_plus_ln = variable(core, L_J_ln, L_T; lvar = zeros(L_J_ln, L_T))
+    s_jt_plus_xf = variable(core, L_J_xf, L_T; lvar = zeros(L_J_xf, L_T))
 
     #Bounds form 4.2.4 Bus voltage (19)
     
@@ -191,7 +199,20 @@ function scopf_model(
     φ_jt_ln = variable(core, L_J_ln, L_T;)
     φ_jt_xf = variable(core, L_J_xf, L_T;)
 
-    #skip overall obj contraints for now
+    z_t_t = variable(core, L_T)
+
+    #objective does not include contingencies rn
+    #4.1 Market surplus objective
+    #constraint (6-8)
+    #All objectives are negative so that we can minimize
+    o6_t = objective(core, -z_t_t[t] for t in 1:L_T)
+    o6_en_max_pr = objective(core, z_w_en_max_pr[w] for w in 1:L_W_en_max_pr)
+    o6_en_max_cs = objective(core, z_w_en_max_cs[w] for w in 1:L_W_en_max_cs)
+    o6_en_min_pr = objective(core, z_w_en_min_pr[w] for w in 1:L_W_en_min_pr)
+    o6_en_min_cs = objective(core, z_w_en_min_cs[w] for w in 1:L_W_en_min_cs)
+
+    c9 = constraint(core, -z_t_t[t] for t in 1:L_T)
+
     #4.2.1 Bus power mismatch and penalized mismatch definitions
     c_11 = constraint(core, p_it_plus[b.i, b.t] - p_it[b.i, b.t] for b in sc_data.busarray; ucon = fill(Inf, size(sc_data.busarray)))
     c_12 = constraint(core, p_it_plus[b.i, b.t] + p_it[b.i, b.t] for b in sc_data.busarray; ucon = fill(Inf, size(sc_data.busarray)))
@@ -384,7 +405,66 @@ function scopf_model(
     c127 = constraint(core, q_jt_qru_cs[cs.j_cs, cs.t] for cs in sc_data.csarray_pqe)
     c128 = constraint(core, q_jt_qrd_cs[cs.j_cs, cs.t] for cs in sc_data.csarray_pqe)
 
+    #4.6.9 Energy cost and value
+    c130_pr = constraint(core, p_jt_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c130_pr_a = constraint!(core, c130_pr, pr.j_pr + L_J_pr*(pr.t-1) => -p_jtm_pr[pr.flat_k] for pr in sc_data.p_jtm_flattened_pr)
+    c130_cs = constraint(core, p_jt_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+    c130_cs_a = constraint!(core, c130_cs, cs.j_cs + L_J_cs*(cs.t-1) => -p_jtm_cs[cs.flat_k] for cs in sc_data.p_jtm_flattened_cs)
+    c131_pr = constraint(core, z_jt_en_pr[pr.j_pr, pr.t]/pr.dt for pr in sc_data.prarray)
+    c131_pr_a = constraint!(core, c131_pr, pr.j_pr + L_J_pr*(pr.t-1) => -pr.c_en*p_jtm_pr[pr.flat_k] for pr in sc_data.p_jtm_flattened_pr)
+    c131_cs = constraint(core, z_jt_en_cs[cs.j_cs, cs.t]/cs.dt for cs in sc_data.csarray)
+    c131_cs_a = constraint!(core, c131_cs, cs.j_cs + L_J_cs*(cs.t-1) => -cs.c_en*p_jtm_cs[cs.flat_k] for cs in sc_data.p_jtm_flattened_cs)
 
+    #4.7 Shunt devices
+    c132 = constraint(core, p_jt_sh[sh.j_sh, sh.t] - g_jt_sh[sh.j_sh, sh.t]*v_it[sh.bus, sh.t]^2 for sh in sc_data.shuntarray)
+    c133 = constraint(core, q_jt_sh[sh.j_sh, sh.t] + b_jt_sh[sh.j_sh, sh.t]*v_it[sh.bus, sh.t]^2 for sh in sc_data.shuntarray)
+    c134 = constraint(core, g_jt_sh[sh.j_sh, sh.t] - sh.g_sh*sh.u_sh for sh in sc_data.shuntarray)
+    c135 = constraint(core, b_jt_sh[sh.j_sh, sh.t] - sh.b_sh*sh.u_sh for sh in sc_data.shuntarray)
+    #Assume (136-137) properly handled in uc solution
+
+    #4.8.1 AC branch flow limits and penalties
+    #AC branches split into ln and xf
+    c139_ln = constraint(core, z_jt_s_ln[ln.j_ln, ln.t] - ln.dt*c_s*s_jt_plus_ln[ln.j_ln, ln.t] for ln in sc_data.aclbrancharray)
+    c139_xf = constraint(core, z_jt_s_xf[xf.j_xf, xf.t] -xf.dt*c_s*s_jt_plus_xf[xf.j_xf, xf.t] for xf in sc_data.acxbrancharray)
+    c140_ln = constraint(core, (p_jt_fr_ln[ln.j_ln, ln.t]^2 + q_jt_fr_ln[ln.j_ln, ln.t]^2)^.5 - ln.s_max - s_jt_plus_ln[ln.j_ln, ln.t] for ln in sc_data.aclbrancharray;
+                        lcon = fill(-Inf, size(sc_data.aclbrancharray)))
+    c140_xf = constraint(core, (p_jt_fr_xf[xf.j_xf, xf.t]^2 + q_jt_fr_xf[xf.j_xf, xf.t]^2)^.5 - xf.s_max - s_jt_plus_xf[xf.j_xf, xf.t] for xf in sc_data.acxbrancharray;
+                        lcon = fill(-Inf, size(sc_data.acxbrancharray)))
+    c141_ln = constraint(core, (p_jt_to_ln[ln.j_ln, ln.t]^2 + q_jt_to_ln[ln.j_ln, ln.t]^2)^.5 - ln.s_max - s_jt_plus_ln[ln.j_ln, ln.t] for ln in sc_data.aclbrancharray;
+                        lcon = fill(-Inf, size(sc_data.aclbrancharray)))
+    c141_xf = constraint(core, (p_jt_to_xf[xf.j_xf, xf.t]^2 + q_jt_to_xf[xf.j_xf, xf.t]^2)^.5 - xf.s_max - s_jt_plus_xf[xf.j_xf, xf.t] for xf in sc_data.acxbrancharray;
+                        lcon = fill(-Inf, size(sc_data.acxbrancharray)))
+
+    #4.8.2 AC branch controls
+    c142 = constraint(core, φ_jt_ln[ln.j_ln, ln.t] for ln in sc_data.aclbrancharray)
+    c143 = constraint(core, τ_jt_ln[ln.j_ln, ln.t] - 1 for ln in sc_data.aclbrancharray)
+    c144 = constraint(core, φ_jt_xf[xf.j_xf, xf.t] - xf.phi_o for xf in sc_data.fpdarray)
+    c145 = constraint(core, τ_jt_xf[xf.j_xf, xf.t] - xf.tau_o for xf in sc_data.fwrarray)
+    c146 = constraint(core, φ_jt_xf[xf.j_xf, xf.t] for xf in sc_data.vpdarray;
+                lcon = [xf.phi_min for xf in sc_data.vpdarray], ucon = [xf.phi_max for xf in sc_data.vpdarray])
+    c147 = constraint(core, τ_jt_xf[xf.j_xf, xf.t] for xf in sc_data.vwrarray;
+                lcon = [xf.tau_min for xf in sc_data.vpdarray], ucon = [xf.tau_max for xf in sc_data.vwrarray])
+
+    #4.8.3 AC branch flows
+    c148_ln = constraint(core, -p_jt_fr_ln[ln.j_ln, ln.t] + ln.u_on*((ln.g_sr+ln.g_fr)*v_it[ln.fr_bus, ln.t]^2/(τ_jt_ln[ln.j_ln, ln.t]^2) + (-ln.g_sr*cos(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t])
+     - ln.b_sr*sin(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t]))*v_it[ln.fr_bus, ln.t]*v_it[ln.to_bus, ln.t]/τ_jt_ln[ln.j_ln, ln.t]) for ln in sc_data.aclbrancharray)
+    c148_xf = constraint(core, -p_jt_fr_xf[xf.j_xf, xf.t] + xf.u_on*((xf.g_sr+xf.g_fr)*v_it[xf.fr_bus, xf.t]^2/(τ_jt_xf[xf.j_xf, xf.t]^2) + (-xf.g_sr*cos(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t])
+     - xf.b_sr*sin(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t]))*v_it[xf.fr_bus, xf.t]*v_it[xf.to_bus, xf.t]/τ_jt_xf[xf.j_xf, xf.t]) for xf in sc_data.acxbrancharray)
+    c149_ln = constraint(core, -q_jt_fr_ln[ln.j_ln, ln.t] + ln.u_on*((-ln.b_sr - ln.b_fr - ln.b_ch/2)*v_it[ln.fr_bus, ln.t]^2/(τ_jt_ln[ln.j_ln, ln.t]^2) + (ln.b_sr*cos(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t]) 
+    - ln.g_sr*sin(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t]))*v_it[ln.fr_bus, ln.t]*v_it[ln.to_bus, ln.t]/τ_jt_ln[ln.j_ln, ln.t]) for ln in sc_data.aclbrancharray)
+    c149_xf = constraint(core, -q_jt_fr_xf[xf.j_xf, xf.t] + xf.u_on*((-xf.b_sr - xf.b_fr - xf.b_ch/2)*v_it[xf.fr_bus, xf.t]^2/(τ_jt_xf[xf.j_xf, xf.t]^2) + (xf.b_sr*cos(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t]) 
+    - xf.g_sr*sin(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t]))*v_it[xf.fr_bus, xf.t]*v_it[xf.to_bus, xf.t]/τ_jt_xf[xf.j_xf, xf.t]) for xf in sc_data.acxbrancharray)
+    c150_ln = constraint(core, -p_jt_to_ln[ln.j_ln, ln.t] + ln.u_on*((ln.g_sr+ln.g_to)*v_it[ln.to_bus, ln.t]^2 + (-ln.g_sr*cos(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t]) 
+    + ln.b_sr*sin(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t]))*v_it[ln.fr_bus, ln.t]*v_it[ln.to_bus, ln.t]/τ_jt_ln[ln.j_ln, ln.t]) for ln in sc_data.aclbrancharray)
+    c150_xf = constraint(core, -p_jt_to_xf[xf.j_xf, xf.t] + xf.u_on*((xf.g_sr+xf.g_to)*v_it[xf.to_bus, xf.t]^2 + (-xf.g_sr*cos(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t]) 
+    + xf.b_sr*sin(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t]))*v_it[xf.fr_bus, xf.t]*v_it[xf.to_bus, xf.t]/τ_jt_xf[xf.j_xf, xf.t]) for xf in sc_data.acxbrancharray)
+    c151_ln = constraint(core, -q_jt_to_ln[ln.j_ln, ln.t] + ln.u_on*((-ln.b_sr-ln.b_to-ln.b_ch/2)*v_it[ln.to_bus, ln.t]^2 + (ln.b_sr*cos(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t]) 
+    + ln.g_sr*sin(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t]))*v_it[ln.fr_bus, ln.t]*v_it[ln.to_bus, ln.t]/τ_jt_ln[ln.j_ln, ln.t]) for ln in sc_data.aclbrancharray)
+    c151_xf = constraint(core, -q_jt_to_xf[xf.j_xf, xf.t] + xf.u_on*((-xf.b_sr-xf.b_to-xf.b_ch/2)*v_it[xf.to_bus, xf.t]^2 + (xf.b_sr*cos(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t]) 
+    + xf.g_sr*sin(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t]))*v_it[xf.fr_bus, xf.t]*v_it[xf.to_bus, xf.t]/τ_jt_xf[xf.j_xf, xf.t]) for xf in sc_data.acxbrancharray)
+
+    #4.8.4 DC lines
+    c156 = constraint(core, p_jt_fr_dc[dc.j_dc, dc.t] + p_jt_to_dc[dc.j_dc, dc.t] for dc in sc_data.dclinearray)
 
 
     model = ExaModel(core; kwargs...)
