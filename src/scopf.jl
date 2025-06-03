@@ -32,6 +32,14 @@ function scopf_model(
     v_uvar = repeat([b.v_max for b in sc_data.bus], 1, L_T)
     p_jtm_pr_uvar = [b.p_max for b in sc_data.p_jtm_flattened_pr]
     p_jtm_cs_uvar = [b.p_max for b in sc_data.p_jtm_flattened_cs]
+    p_jt_fr_dc_lvar = [-dc.pdc_max for dc in sc_data.dclinearray]
+    p_jt_fr_dc_uvar = [dc.pdc_max for dc in sc_data.dclinearray]
+    p_jt_to_dc_lvar = [-dc.pdc_max for dc in sc_data.dclinearray]
+    p_jt_to_dc_uvar = [dc.pdc_max for dc in sc_data.dclinearray]
+    q_jt_fr_dc_lvar = [dc.qdc_fr_min for dc in sc_data.dclinearray]
+    q_jt_fr_dc_uvar = [dc.qdc_fr_max for dc in sc_data.dclinearray]
+    q_jt_to_dc_lvar = [dc.qdc_to_min for dc in sc_data.dclinearray]
+    q_jt_to_dc_uvar = [dc.qdc_to_max for dc in sc_data.dclinearray]
     
     sc_data = convert_data(sc_data, backend)
 
@@ -69,18 +77,18 @@ function scopf_model(
     p_jtm_cs = variable(core, length(sc_data.p_jtm_flattened_cs); lvar = zeros(size(sc_data.p_jtm_flattened_cs)), uvar = p_jtm_cs_uvar)
     #to/from power split into ln, xf, and dc lines
     #Bounds from 4.8.4 DC lines (152-155)
-    p_jt_fr_ln = variable(core, L_J_ln, L_T;)
-    p_jt_fr_xf = variable(core, L_J_xf, L_T;)
-    p_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = [-dc.pdc_max for dc in sc_data.dclinearray], uvar = [dc.pdc_max for dc in sc_data.dclinearray])
-    p_jt_to_ln = variable(core, L_J_ln, L_T;)
-    p_jt_to_xf = variable(core, L_J_xf, L_T;)
-    p_jt_to_dc = variable(core, L_J_dc, L_T; lvar = [-dc.pdc_max for dc in sc_data.dclinearray], uvar = [dc.pdc_max for dc in sc_data.dclinearray])
-    q_jt_fr_ln = variable(core, L_J_ln, L_T;)
-    q_jt_fr_xf = variable(core, L_J_xf, L_T;)
-    q_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = [dc.qdc_fr_min for dc in sc_data.dclinearray], uvar = [dc.qdc_fr_max for dc in sc_data.dclinearray])
-    q_jt_to_ln = variable(core, L_J_ln, L_T;)
-    q_jt_to_xf = variable(core, L_J_xf, L_T;)
-    q_jt_to_dc = variable(core, L_J_dc, L_T; lvar = [dc.qdc_to_min for dc in sc_data.dclinearray], uvar = [dc.qdc_to_max for dc in sc_data.dclinearray])
+    p_jt_fr_ln = variable(core, L_J_ln, L_T; start = ones(L_J_ln, L_T))
+    p_jt_fr_xf = variable(core, L_J_xf, L_T; start = ones(L_J_xf, L_T))
+    p_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = p_jt_fr_dc_lvar, uvar = p_jt_fr_dc_uvar)
+    p_jt_to_ln = variable(core, L_J_ln, L_T; start = ones(L_J_ln, L_T))
+    p_jt_to_xf = variable(core, L_J_xf, L_T; start = ones(L_J_xf, L_T))
+    p_jt_to_dc = variable(core, L_J_dc, L_T; lvar = p_jt_to_dc_lvar, uvar = p_jt_to_dc_uvar)
+    q_jt_fr_ln = variable(core, L_J_ln, L_T; start = ones(L_J_ln, L_T))
+    q_jt_fr_xf = variable(core, L_J_xf, L_T; start = ones(L_J_xf, L_T))
+    q_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = q_jt_fr_dc_lvar, uvar = q_jt_fr_dc_uvar)
+    q_jt_to_ln = variable(core, L_J_ln, L_T; start = ones(L_J_ln, L_T))
+    q_jt_to_xf = variable(core, L_J_xf, L_T; start = ones(L_J_xf, L_T))
+    q_jt_to_dc = variable(core, L_J_dc, L_T; lvar = q_jt_to_dc_lvar, uvar = q_jt_to_dc_uvar)
     #p_jt rgu, rgd, scr, rru,on, rru,off, rrd,on, rrd,off and q_jt qru/qrd split into pr and cs
     #bounds from 4.6.4 Device reserve variable domains (80-89)
     p_jt_rgu_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)))
@@ -140,6 +148,7 @@ function scopf_model(
     z_w_en_max_cs = variable(core, L_W_en_max_cs;)
     z_w_en_min_pr = variable(core, L_W_en_min_pr;)
     z_w_en_min_cs = variable(core, L_W_en_min_cs;)
+
     #split z_jt_en and on into pr and cs
     z_jt_en_pr = variable(core, L_J_pr, L_T;)
     z_jt_en_cs = variable(core, L_J_cs, L_T;)
@@ -194,24 +203,32 @@ function scopf_model(
     θ_it = variable(core, I, L_T;)
 
     #split τjt and φjt into ln and xf
-    τ_jt_ln = variable(core, L_J_ln, L_T;)
-    τ_jt_xf = variable(core, L_J_xf, L_T;)
+    τ_jt_ln = variable(core, L_J_ln, L_T; start = ones(L_J_ln, L_T))
+    τ_jt_xf = variable(core, L_J_xf, L_T; start = ones(L_J_xf, L_T))
     φ_jt_ln = variable(core, L_J_ln, L_T;)
     φ_jt_xf = variable(core, L_J_xf, L_T;)
 
-    z_t_t = variable(core, L_T)
 
     #objective does not include contingencies rn
     #4.1 Market surplus objective
-    #constraint (6-8)
+    #constraint (6-9)
     #All objectives are negative so that we can minimize
-    o6_t = objective(core, -z_t_t[t] for t in 1:L_T)
+    o6_t_pr = objective(core, -(-z_jt_en_pr[pr.j_pr, pr.t] - (z_jt_su_pr[pr.j_pr, pr.t] + z_jt_sd_pr[pr.j_pr, pr.t]) - (z_jt_on_pr[pr.j_pr, pr.t] + z_jt_sus_pr[pr.j_pr, pr.t])
+                        - (z_jt_rgu_pr[pr.j_pr, pr.t] + z_jt_rgd_pr[pr.j_pr, pr.t] + z_jt_scr_pr[pr.j_pr, pr.t] + z_jt_nsc_pr[pr.j_pr, pr.t] + z_jt_rru_pr[pr.j_pr, pr.t] + 
+                        z_jt_rrd_pr[pr.j_pr, pr.t] + z_jt_qru_pr[pr.j_pr, pr.t] +z_jt_qrd_pr[pr.j_pr, pr.t])) for pr in sc_data.prarray)
+    o6_t_cs = objective(core, -(z_jt_en_cs[cs.j_cs, cs.t] - (z_jt_su_cs[cs.j_cs, cs.t] + z_jt_sd_cs[cs.j_cs, cs.t]) - (z_jt_on_cs[cs.j_cs, cs.t] + z_jt_sus_cs[cs.j_cs, cs.t])
+                        - (z_jt_rgu_cs[cs.j_cs, cs.t] + z_jt_rgd_cs[cs.j_cs, cs.t] + z_jt_scr_cs[cs.j_cs, cs.t] + z_jt_nsc_cs[cs.j_cs, cs.t] + z_jt_rru_cs[cs.j_cs, cs.t] + 
+                        z_jt_rrd_cs[cs.j_cs, cs.t] + z_jt_qru_cs[cs.j_cs, cs.t] +z_jt_qrd_cs[cs.j_cs, cs.t])) for cs in sc_data.csarray)
+    o6_t_ln = objective(core, -(-(z_jt_su_ln[ln.j_ln, ln.t] + z_jt_sd_ln[ln.j_ln, ln.t]) - z_jt_s_ln[ln.j_ln, ln.t]) for ln in sc_data.aclbrancharray)
+    o6_t_xf = objective(core, -(-(z_jt_su_xf[xf.j_xf, xf.t] + z_jt_sd_xf[xf.j_xf, xf.t]) - z_jt_s_xf[xf.j_xf, xf.t]) for xf in sc_data.acxbrancharray)
+    o6_t_i = objective(core, -(-(z_it_p[b.i, b.t] + z_it_q[b.i, b.t])) for b in sc_data.busarray)
+    o6_t_Np = objective(core, -(-(z_nt_rgu[n.n_p, n.t] + z_nt_rgd[n.n_p, n.t] + z_nt_scr[n.n_p, n.t] + z_nt_nsc[n.n_p, n.t] + z_nt_rru[n.n_p, n.t] + z_nt_rrd[n.n_p, n.t])) for n in sc_data.preservearray)
+    o6_t_Nq = objective(core, -(-(z_nt_qru[n.n_q, n.t] + z_nt_qrd[n.n_q, n.t])) for n in sc_data.qreservearray)
     o6_en_max_pr = objective(core, z_w_en_max_pr[w] for w in 1:L_W_en_max_pr)
     o6_en_max_cs = objective(core, z_w_en_max_cs[w] for w in 1:L_W_en_max_cs)
     o6_en_min_pr = objective(core, z_w_en_min_pr[w] for w in 1:L_W_en_min_pr)
     o6_en_min_cs = objective(core, z_w_en_min_cs[w] for w in 1:L_W_en_min_cs)
 
-    c9 = constraint(core, -z_t_t[t] for t in 1:L_T)
 
     #4.2.1 Bus power mismatch and penalized mismatch definitions
     c_11 = constraint(core, p_it_plus[b.i, b.t] - p_it[b.i, b.t] for b in sc_data.busarray; ucon = fill(Inf, size(sc_data.busarray)))
@@ -443,9 +460,10 @@ function scopf_model(
     c146 = constraint(core, φ_jt_xf[xf.j_xf, xf.t] for xf in sc_data.vpdarray;
                 lcon = [xf.phi_min for xf in sc_data.vpdarray], ucon = [xf.phi_max for xf in sc_data.vpdarray])
     c147 = constraint(core, τ_jt_xf[xf.j_xf, xf.t] for xf in sc_data.vwrarray;
-                lcon = [xf.tau_min for xf in sc_data.vpdarray], ucon = [xf.tau_max for xf in sc_data.vwrarray])
+                lcon = [xf.tau_min for xf in sc_data.vwrarray], ucon = [xf.tau_max for xf in sc_data.vwrarray])
 
     #4.8.3 AC branch flows
+    
     c148_ln = constraint(core, -p_jt_fr_ln[ln.j_ln, ln.t] + ln.u_on*((ln.g_sr+ln.g_fr)*v_it[ln.fr_bus, ln.t]^2/(τ_jt_ln[ln.j_ln, ln.t]^2) + (-ln.g_sr*cos(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t])
      - ln.b_sr*sin(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t]))*v_it[ln.fr_bus, ln.t]*v_it[ln.to_bus, ln.t]/τ_jt_ln[ln.j_ln, ln.t]) for ln in sc_data.aclbrancharray)
     c148_xf = constraint(core, -p_jt_fr_xf[xf.j_xf, xf.t] + xf.u_on*((xf.g_sr+xf.g_fr)*v_it[xf.fr_bus, xf.t]^2/(τ_jt_xf[xf.j_xf, xf.t]^2) + (-xf.g_sr*cos(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t])
@@ -462,12 +480,71 @@ function scopf_model(
     + ln.g_sr*sin(θ_it[ln.fr_bus, ln.t] - θ_it[ln.to_bus, ln.t] - φ_jt_ln[ln.j_ln, ln.t]))*v_it[ln.fr_bus, ln.t]*v_it[ln.to_bus, ln.t]/τ_jt_ln[ln.j_ln, ln.t]) for ln in sc_data.aclbrancharray)
     c151_xf = constraint(core, -q_jt_to_xf[xf.j_xf, xf.t] + xf.u_on*((-xf.b_sr-xf.b_to-xf.b_ch/2)*v_it[xf.to_bus, xf.t]^2 + (xf.b_sr*cos(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t]) 
     + xf.g_sr*sin(θ_it[xf.fr_bus, xf.t] - θ_it[xf.to_bus, xf.t] - φ_jt_xf[xf.j_xf, xf.t]))*v_it[xf.fr_bus, xf.t]*v_it[xf.to_bus, xf.t]/τ_jt_xf[xf.j_xf, xf.t]) for xf in sc_data.acxbrancharray)
+    
 
     #4.8.4 DC lines
     c156 = constraint(core, p_jt_fr_dc[dc.j_dc, dc.t] + p_jt_to_dc[dc.j_dc, dc.t] for dc in sc_data.dclinearray)
 
 
     model = ExaModel(core; kwargs...)
-    return model, sc_data
+
+    obj_vars = (
+        z_w_en_max_pr = z_w_en_max_pr,
+        z_w_en_max_cs = z_w_en_max_cs,
+        z_w_en_min_pr = z_w_en_min_pr,
+        z_w_en_min_cs = z_w_en_min_cs,
+        
+        #split z_jt_en and on into pr and cs
+        z_jt_en_pr = z_jt_en_pr,
+        z_jt_en_cs = z_jt_en_cs,
+        z_jt_on_pr = z_jt_on_pr,
+        z_jt_on_cs = z_jt_on_cs,
+
+        z_it_p = z_it_p,
+        z_it_q = z_it_q,
+
+        #z su/sd split into pr, cs, ln, xf
+        z_jt_sd_pr = z_jt_sd_pr,
+        z_jt_sd_cs = z_jt_sd_cs,
+        z_jt_sd_ln = z_jt_sd_ln,
+        z_jt_sd_xf = z_jt_sd_xf,
+        z_jt_su_pr = z_jt_su_pr,
+        z_jt_su_cs = z_jt_su_cs ,
+        z_jt_su_ln = z_jt_su_ln,
+        z_jt_su_xf = z_jt_su_xf,
+        #z_jt_sus split into pr and cs
+        z_jt_sus_pr = z_jt_sus_pr, 
+        z_jt_sus_cs = z_jt_sus_cs,
+        #z_jt_s split into ln and xf
+        z_jt_s_ln = z_jt_s_ln,
+        z_jt_s_xf = z_jt_s_xf ,
+        #z_jt rgu, rgd, scr, nsc, rru, rrd, qru, qrd split into pr and cs
+        z_jt_rgu_pr = z_jt_rgu_pr, 
+        z_jt_rgu_cs = z_jt_rgu_cs,
+        z_jt_rgd_pr = z_jt_rgd_pr,
+        z_jt_rgd_cs = z_jt_rgd_cs,
+        z_jt_scr_pr = z_jt_scr_pr,
+        z_jt_scr_cs = z_jt_scr_cs,
+        z_jt_nsc_pr = z_jt_nsc_pr,
+        z_jt_nsc_cs = z_jt_nsc_cs,
+        z_jt_rru_pr = z_jt_rru_pr,
+        z_jt_rru_cs = z_jt_rru_cs,
+        z_jt_rrd_pr = z_jt_rrd_pr,
+        z_jt_rrd_cs = z_jt_rrd_cs,
+        z_jt_qru_pr = z_jt_qru_pr,
+        z_jt_qru_cs = z_jt_qru_cs,
+        z_jt_qrd_pr = z_jt_qrd_pr,
+        z_jt_qrd_cs = z_jt_qrd_cs,
+
+        z_nt_rgu = z_nt_rgu,
+        z_nt_rgd = z_nt_rgd,
+        z_nt_scr = z_nt_scr ,
+        z_nt_nsc = z_nt_nsc,
+        z_nt_rru = z_nt_rru ,
+        z_nt_rrd = z_nt_rrd,
+        z_nt_qru = z_nt_qru,
+        z_nt_qrd = z_nt_qrd,
+        )
+    return model, sc_data, obj_vars
 end
 
