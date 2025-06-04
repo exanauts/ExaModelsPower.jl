@@ -257,11 +257,12 @@ function parse_sc_data_static(data)
                     p_min = convert(Vector{Float64}, ts_val["p_lb"])
                     q_max = convert(Vector{Float64}, ts_val["q_ub"])
                     q_min = convert(Vector{Float64}, ts_val["q_lb"])
+                    sus = val["startup_states"]
                     
                     (j = j, j_prcs = j_prcs, j_pr = j_pr, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
                     c_rgu = c_rgu, c_rgd = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
-                    p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0, p_max=p_max, p_min=p_min, q_max=q_max, q_min=q_min)
+                    p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0, p_max=p_max, p_min=p_min, q_max=q_max, q_min=q_min, sus=sus)
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "producer"
             ], by = x -> x.j),
         
@@ -307,11 +308,12 @@ function parse_sc_data_static(data)
                     p_min = convert(Vector{Float64}, ts_val["p_lb"])
                     q_max = convert(Vector{Float64}, ts_val["q_ub"])
                     q_min = convert(Vector{Float64}, ts_val["q_lb"])
+                    sus = val["startup_states"]
 
                     (j = j, j_prcs = j_prcs, j_cs = j_cs, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
                     c_rgu = c_rgu, c_rgd = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
-                    p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0, p_max=p_max, p_min=p_min, q_max=q_max, q_min=q_min)                
+                    p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0, p_max=p_max, p_min=p_min, q_max=q_max, q_min=q_min, sus=sus)                
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "consumer"
             ]
         , by = x -> x.j),
@@ -391,20 +393,6 @@ function parse_sc_data_static(data)
             if device["bus"] == bus["uid"] && parse(Int, match(r"\d+", device["uid"]).match) >= L_J_pr
         ],
 
-
-        T_sus_jft = [
-            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
-            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
-            t = t,
-            t_prime = t_prime, 
-            f = f
-            )
-            for val in values(data.sdd_lookup)
-            for f in 1:length(val["startup_states"])
-            for t in 1:length(data.dt)
-            for t_prime in 1:length(data.dt)
-            if t_prime < t && get_as(data.dt,t)[1] - get_as(data.dt, t_prime)[1] <= val["startup_states"][f][2] + ε_time
-        ],
 
         T_sus_jf = [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
@@ -509,7 +497,27 @@ function parse_sc_data(data, uc_data)
     add_status_flags(uc_data["time_series_output"]["ac_line"], data.ac_line_lookup)
     add_status_flags(uc_data["time_series_output"]["two_winding_transformer"], data.twt_lookup)
     add_status_flags(uc_data["time_series_output"]["simple_dispatchable_device"], data.sdd_lookup)
+    ε_time = 1e-6
 
+
+
+
+    T_sus_jft = [
+            (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+            j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
+            t = t,
+            t_prime = t_prime, 
+            u_on = uc["on_status"][t_prime],
+            f = f
+            )
+            for val in values(data.sdd_lookup)
+            for f in 1:length(val["startup_states"])
+            for t in 1:length(data.dt)
+            for t_prime in 1:length(data.dt)
+            if t_prime < t && get_as(data.dt,t)[1] - get_as(data.dt, t_prime)[1] <= val["startup_states"][f][2] + ε_time
+            for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
+            if val["uid"] == uc["uid"]
+        ]
     #Build a p_sdpc set to be used for T_sdpc
     #Index order is j_prcs, t, t_prime
     p_sdpc = zeros(L_J_cspr, length(data.dt), length(data.dt))
@@ -705,7 +713,7 @@ function parse_sc_data(data, uc_data)
                 w_en_max_pr_ind += 1
                 for t in 1:length(data.dt)
                     if w[1] + ε_time < get_as(data.dt, t)[2] && get_as(data.dt, t)[2] <= w[2] + ε_time
-                        push!(T_w_en_max_pr, (t_w_en_max_pr_ind = t_w_en_max_pr_ind,
+                        push!(T_w_en_max_pr, (w_en_max_pr_ind = w_en_max_pr_ind,
                             j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
                             j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
                             j_pr = parse(Int, match(r"\d+", val["uid"]).match) + 1,
@@ -725,7 +733,7 @@ function parse_sc_data(data, uc_data)
                 w_en_max_cs_ind += 1
                 for t in 1:length(data.dt)
                     if w[1] + ε_time < get_as(data.dt, t)[2] && get_as(data.dt, t)[2] <= w[2] + ε_time
-                        push!(T_w_en_max_cs, (t_w_en_max_cs_ind = t_w_en_max_cs_ind,
+                        push!(T_w_en_max_cs, (w_en_max_cs_ind = w_en_max_cs_ind,
                             j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
                             j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
                             j_cs = parse(Int, match(r"\d+", val["uid"]).match) + 1 - L_J_pr,
@@ -745,7 +753,7 @@ function parse_sc_data(data, uc_data)
                 w_en_min_pr_ind += 1
                 for t in 1:length(data.dt)
                     if w[1] + ε_time < get_as(data.dt, t)[2] && get_as(data.dt, t)[2] <= w[2] + ε_time
-                        push!(T_w_en_min_pr, (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+                        push!(T_w_en_min_pr, (w_en_min_pr_ind=w_en_min_pr_ind, j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
                         j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
                         j_pr = parse(Int, match(r"\d+", val["uid"]).match) + 1,
                         t = t,
@@ -764,7 +772,7 @@ function parse_sc_data(data, uc_data)
                 w_en_min_cs_ind += 1
                 for t in 1:length(data.dt)
                     if w[1] + ε_time < get_as(data.dt, t)[2] && get_as(data.dt, t)[2] <= w[2] + ε_time
-                        push!(T_w_en_min_cs, (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+                        push!(T_w_en_min_cs, (w_en_min_cs_ind=w_en_min_cs_ind, j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
                         j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
                         j_cs = parse(Int, match(r"\d+", val["uid"]).match) + 1 - L_J_pr,
                         t = t,
@@ -826,11 +834,12 @@ function parse_sc_data(data, uc_data)
         qreservearray = [(;n=q.n, n_q=q.n_q, uid=q.uid, c_qru=q.c_qru, c_qrd=q.c_qrd, q_qru_min=q.q_qru_min[t], q_qrd_min=q.q_qrd_min[t], t=t, dt = sc_data.dt[t])
         for q in sc_data.reactive_reserve, t in periods],
 
-        prarray = [(;j=p.j, j_prcs=p.j_prcs, j_pr=p.j_pr, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, p_ru=p.p_ru, p_rd=p.p_rd,  
+        prarray = [(;j=p.j, j_prcs=p.j_prcs, j_pr=p.j_pr, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, c_su = p.c_su, p_ru=p.p_ru, p_rd=p.p_rd,  
         p_ru_su=p.p_ru_su, p_rd_sd=p.p_rd_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
         c_rru_off=p.c_rru_off[t], c_rrd_on=p.c_rrd_on[t], c_rrd_off=p.c_rrd_off[t], c_qru=p.c_qru[t], c_qrd=p.c_qrd[t], p_rgu_max=p.p_rgu_max,
         p_rgd_max=p.p_rgd_max, p_scr_max=p.p_scr_max, p_nsc_max=p.p_nsc_max, p_rru_on_max=p.p_rru_on_max, p_rru_off_max=p.p_rru_off_max, 
-        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t], u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
+        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t], sus = p.sus,
+        u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
         sum_T_supc_pr_jt = sum_T_supc_pr[p.j_pr, t], sum_T_sdpc_pr_jt = sum_T_sdpc_pr[p.j_pr, t], sum2_T_supc_pr_jt=sum2_T_supc_pr[p.j_pr, t], sum2_T_sdpc_pr_jt=sum2_T_sdpc_pr[p.j_pr, t], dt = sc_data.dt[t])
         for p in sc_data.prod, t in periods
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
@@ -872,11 +881,12 @@ function parse_sc_data(data, uc_data)
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
         if p.uid == uc["uid"]],
 
-        csarray = [(;j=p.j, j_prcs=p.j_prcs, j_cs=p.j_cs, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, p_ru=p.p_ru, p_rd=p.p_rd,  
+        csarray = [(;j=p.j, j_prcs=p.j_prcs, j_cs=p.j_cs, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, c_su=p.c_su, p_ru=p.p_ru, p_rd=p.p_rd,  
         p_ru_su=p.p_ru_su, p_rd_sd=p.p_rd_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
         c_rru_off=p.c_rru_off[t], c_rrd_on=p.c_rrd_on[t], c_rrd_off=p.c_rrd_off[t], c_qru=p.c_qru[t], c_qrd=p.c_qrd[t], p_rgu_max=p.p_rgu_max,
         p_rgd_max=p.p_rgd_max, p_scr_max=p.p_scr_max, p_nsc_max=p.p_nsc_max, p_rru_on_max=p.p_rru_on_max, p_rru_off_max=p.p_rru_off_max, 
-        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t], u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
+        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t],
+        sus=p.sus, u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
         sum_T_supc_cs_jt = sum_T_supc_cs[p.j_cs, t], sum_T_sdpc_cs_jt = sum_T_sdpc_cs[p.j_cs, t], sum2_T_supc_cs_jt = sum2_T_supc_cs[p.j_cs, t], sum2_T_sdpc_cs_jt = sum2_T_sdpc_cs[p.j_cs, t], dt = sc_data.dt[t])
         for p in sc_data.cons, t in periods
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
@@ -951,6 +961,7 @@ function parse_sc_data(data, uc_data)
         W_en_min_cs=W_en_min_cs,
         T_w_en_min_pr=T_w_en_min_pr,
         T_w_en_min_cs=T_w_en_min_cs,
+        T_sus_jft=T_sus_jft
 
     )
 

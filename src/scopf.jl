@@ -40,9 +40,59 @@ function scopf_model(
     q_jt_fr_dc_uvar = [dc.qdc_fr_max for dc in sc_data.dclinearray]
     q_jt_to_dc_lvar = [dc.qdc_to_min for dc in sc_data.dclinearray]
     q_jt_to_dc_uvar = [dc.qdc_to_max for dc in sc_data.dclinearray]
+
+    z_jt_on_pr = sum([pr.dt*pr.c_on*pr.u_on for pr in sc_data.prarray])
+    z_jt_on_cs = sum([cs.dt*cs.c_on*cs.u_on for cs in sc_data.csarray])
+    z_jt_su_pr = sum([pr.c_su*pr.u_su for pr in sc_data.prarray])
+    z_jt_su_cs = sum([cs.c_su*cs.u_su for cs in sc_data.csarray])
+    z_jt_su_ln = sum([ln.c_su*ln.u_su for ln in sc_data.aclbrancharray])
+    z_jt_su_xf = sum([xf.c_su*xf.u_su for xf in sc_data.acxbrancharray])
+    z_jt_sd_pr = sum([pr.c_sd*pr.u_sd for pr in sc_data.prarray])
+    z_jt_sd_cs = sum([cs.c_sd*cs.u_sd for cs in sc_data.csarray])
+    z_jt_sd_ln = sum([ln.c_sd*ln.u_sd for ln in sc_data.aclbrancharray])
+    z_jt_sd_xf = sum([xf.c_sd*xf.u_sd for xf in sc_data.acxbrancharray])
+
+    z_jt_sus_pr = 0
+    for pr in sc_data.prarray
+        if pr.u_su == 0
+            continue
+        end
+        permitted_c_sus = []
+        for f_ind in 1:length(pr.sus)
+            if sum([tf.u_on for tf in sc_data.T_sus_jft if tf.j == pr.j && tf.t == pr.t && f_ind == tf.f], init=0) == 0
+                continue
+            end
+            !push(permitted_c_sus, pr.sus[1])
+        end
+        
+        min_c_sus = minimum(permitted_c_sus, init=0)
+        if min_c_sus <= 0
+            z_jt_sus_pr += min_c_sus
+        end
+    end
+
+    z_jt_sus_cs = 0
+    for cs in sc_data.csarray
+        if cs.u_su == 0
+            continue
+        end
+        permitted_c_sus = []
+        for f_ind in 1:length(cs.sus)
+            if sum([tf.u_on for tf in sc_data.T_sus_jft if tf.j == cs.j && tf.t == cs.t && f_ind == tf.f], init=0) == 0
+                continue
+            end
+            !push(permitted_c_sus, cs.sus[1])
+        end
+        
+        min_c_sus = minimum(permitted_c_sus, init=0)
+        if min_c_sus <= 0
+            z_jt_sus_cs += min_c_sus
+        end
+    end
     
     sc_data = convert_data(sc_data, backend)
 
+    
     core = ExaCore(T; backend =backend)
 
     #variables are indexed j,t,k or j,t (t always second if present)
@@ -152,24 +202,10 @@ function scopf_model(
     #split z_jt_en and on into pr and cs
     z_jt_en_pr = variable(core, L_J_pr, L_T;)
     z_jt_en_cs = variable(core, L_J_cs, L_T;)
-    z_jt_on_pr = variable(core, L_J_pr, L_T;)
-    z_jt_on_cs = variable(core, L_J_cs, L_T;)
 
     z_it_p = variable(core, I, L_T;)
     z_it_q = variable(core, I, L_T;)
 
-    #z su/sd split into pr, cs, ln, xf
-    z_jt_sd_pr = variable(core, L_J_pr, L_T;)
-    z_jt_sd_cs = variable(core, L_J_cs, L_T;)
-    z_jt_sd_ln = variable(core, L_J_ln, L_T;)
-    z_jt_sd_xf = variable(core, L_J_xf, L_T;)
-    z_jt_su_pr = variable(core, L_J_pr, L_T;)
-    z_jt_su_cs = variable(core, L_J_cs, L_T;)
-    z_jt_su_ln = variable(core, L_J_ln, L_T;)
-    z_jt_su_xf = variable(core, L_J_xf, L_T;)
-    #z_jt_sus split into pr and cs
-    z_jt_sus_pr = variable(core, L_J_pr, L_T;)
-    z_jt_sus_cs = variable(core, L_J_cs, L_T;)
     #z_jt_s split into ln and xf
     z_jt_s_ln = variable(core, L_J_ln, L_T;)
     z_jt_s_xf = variable(core, L_J_xf, L_T;)
@@ -213,14 +249,17 @@ function scopf_model(
     #4.1 Market surplus objective
     #constraint (6-9)
     #All objectives are negative so that we can minimize
-    o6_t_pr = objective(core, -(-z_jt_en_pr[pr.j_pr, pr.t] - (z_jt_su_pr[pr.j_pr, pr.t] + z_jt_sd_pr[pr.j_pr, pr.t]) - (z_jt_on_pr[pr.j_pr, pr.t] + z_jt_sus_pr[pr.j_pr, pr.t])
+
+    #Removing all uc variables, which include z_on, z_su, z_sd, z_sus
+
+    o6_t_pr = objective(core, -(-z_jt_en_pr[pr.j_pr, pr.t] 
                         - (z_jt_rgu_pr[pr.j_pr, pr.t] + z_jt_rgd_pr[pr.j_pr, pr.t] + z_jt_scr_pr[pr.j_pr, pr.t] + z_jt_nsc_pr[pr.j_pr, pr.t] + z_jt_rru_pr[pr.j_pr, pr.t] + 
                         z_jt_rrd_pr[pr.j_pr, pr.t] + z_jt_qru_pr[pr.j_pr, pr.t] +z_jt_qrd_pr[pr.j_pr, pr.t])) for pr in sc_data.prarray)
-    o6_t_cs = objective(core, -(z_jt_en_cs[cs.j_cs, cs.t] - (z_jt_su_cs[cs.j_cs, cs.t] + z_jt_sd_cs[cs.j_cs, cs.t]) - (z_jt_on_cs[cs.j_cs, cs.t] + z_jt_sus_cs[cs.j_cs, cs.t])
+    o6_t_cs = objective(core, -(z_jt_en_cs[cs.j_cs, cs.t] 
                         - (z_jt_rgu_cs[cs.j_cs, cs.t] + z_jt_rgd_cs[cs.j_cs, cs.t] + z_jt_scr_cs[cs.j_cs, cs.t] + z_jt_nsc_cs[cs.j_cs, cs.t] + z_jt_rru_cs[cs.j_cs, cs.t] + 
                         z_jt_rrd_cs[cs.j_cs, cs.t] + z_jt_qru_cs[cs.j_cs, cs.t] +z_jt_qrd_cs[cs.j_cs, cs.t])) for cs in sc_data.csarray)
-    o6_t_ln = objective(core, -(-(z_jt_su_ln[ln.j_ln, ln.t] + z_jt_sd_ln[ln.j_ln, ln.t]) - z_jt_s_ln[ln.j_ln, ln.t]) for ln in sc_data.aclbrancharray)
-    o6_t_xf = objective(core, -(-(z_jt_su_xf[xf.j_xf, xf.t] + z_jt_sd_xf[xf.j_xf, xf.t]) - z_jt_s_xf[xf.j_xf, xf.t]) for xf in sc_data.acxbrancharray)
+    o6_t_ln = objective(core, -(- z_jt_s_ln[ln.j_ln, ln.t]) for ln in sc_data.aclbrancharray)
+    o6_t_xf = objective(core, -(- z_jt_s_xf[xf.j_xf, xf.t]) for xf in sc_data.acxbrancharray)
     o6_t_i = objective(core, -(-(z_it_p[b.i, b.t] + z_it_q[b.i, b.t])) for b in sc_data.busarray)
     o6_t_Np = objective(core, -(-(z_nt_rgu[n.n_p, n.t] + z_nt_rgd[n.n_p, n.t] + z_nt_scr[n.n_p, n.t] + z_nt_nsc[n.n_p, n.t] + z_nt_rru[n.n_p, n.t] + z_nt_rrd[n.n_p, n.t])) for n in sc_data.preservearray)
     o6_t_Nq = objective(core, -(-(z_nt_qru[n.n_q, n.t] + z_nt_qrd[n.n_q, n.t])) for n in sc_data.qreservearray)
@@ -497,24 +536,10 @@ function scopf_model(
         #split z_jt_en and on into pr and cs
         z_jt_en_pr = z_jt_en_pr,
         z_jt_en_cs = z_jt_en_cs,
-        z_jt_on_pr = z_jt_on_pr,
-        z_jt_on_cs = z_jt_on_cs,
 
         z_it_p = z_it_p,
         z_it_q = z_it_q,
 
-        #z su/sd split into pr, cs, ln, xf
-        z_jt_sd_pr = z_jt_sd_pr,
-        z_jt_sd_cs = z_jt_sd_cs,
-        z_jt_sd_ln = z_jt_sd_ln,
-        z_jt_sd_xf = z_jt_sd_xf,
-        z_jt_su_pr = z_jt_su_pr,
-        z_jt_su_cs = z_jt_su_cs ,
-        z_jt_su_ln = z_jt_su_ln,
-        z_jt_su_xf = z_jt_su_xf,
-        #z_jt_sus split into pr and cs
-        z_jt_sus_pr = z_jt_sus_pr, 
-        z_jt_sus_cs = z_jt_sus_cs,
         #z_jt_s split into ln and xf
         z_jt_s_ln = z_jt_s_ln,
         z_jt_s_xf = z_jt_s_xf ,
@@ -545,6 +570,10 @@ function scopf_model(
         z_nt_qru = z_nt_qru,
         z_nt_qrd = z_nt_qrd,
         )
-    return model, sc_data, obj_vars
+
+    unincluded_obj = -(z_jt_on_pr + z_jt_on_cs + z_jt_su_pr + z_jt_su_cs + z_jt_su_ln + z_jt_su_xf
+                    + z_jt_sd_pr + z_jt_sd_cs + z_jt_sd_ln + z_jt_sd_xf + z_jt_sus_pr + z_jt_sus_cs)
+    return model, sc_data, obj_vars, unincluded_obj
+
 end
 
