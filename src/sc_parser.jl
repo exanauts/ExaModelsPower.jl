@@ -819,7 +819,7 @@ function parse_sc_data(data, uc_data, data_json)
     for ctg in data_json["reliability"]["contingency"], t in 1:length(sc_data.dt)
         for component in ctg["components"]
             for val in values(data.ac_line_lookup) 
-                if val["uid"] == component
+                if val["uid"] != component
                     for uc in uc_data["time_series_output"]["ac_line"]
                         if val["uid"] == uc["uid"]
                             r = val["r"]
@@ -842,7 +842,7 @@ function parse_sc_data(data, uc_data, data_json)
     for ctg in data_json["reliability"]["contingency"], t in 1:length(sc_data.dt)
         for component in ctg["components"]
             for val in values(data.twt_lookup) 
-                if val["uid"] == component
+                if val["uid"] != component
                     for uc in uc_data["time_series_output"]["two_winding_transformer"]
                         if val["uid"] == uc["uid"]
                             r = val["r"]
@@ -863,7 +863,7 @@ function parse_sc_data(data, uc_data, data_json)
     for ctg in data_json["reliability"]["contingency"], t in 1:length(sc_data.dt)
         for component in ctg["components"]
             for val in values(data.dc_line_lookup) 
-                if val["uid"] == component
+                if val["uid"] != component
                     push!(jtk_dc_flattened, (flat_jtk_dc=flat_jtk_dc, ctg = parse(Int, match(r"\d+", ctg["uid"]).match)+1, j = parse(Int, match(r"\d+", val["uid"]).match)+1+ L_J_ac, 
                     j_dc = parse(Int, match(r"\d+", val["uid"]).match)+1, to_bus = parse(Int, match(r"\d+", val["to_bus"]).match)+1,
                     fr_bus = parse(Int, match(r"\d+", val["fr_bus"]).match)+1, t=t, dt = sc_data.dt[t]))
