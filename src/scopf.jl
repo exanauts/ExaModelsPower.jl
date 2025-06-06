@@ -10,8 +10,9 @@ function scopf_model(
 
     uc_data = JSON.parsefile(uc_filename)
     data = GOC3Benchmark.get_data_from_file(filename)
-    sc_data, lengths = parse_sc_data(data, uc_data)
-
+    data_json = JSON.parsefile(filename)
+    sc_data, lengths = parse_sc_data(data, uc_data, data_json)
+    
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
     L_J_pr, L_J_cspr, L_J_sh) = lengths
 
@@ -23,6 +24,7 @@ function scopf_model(
     L_W_en_min_cs = length(sc_data.W_en_min_cs)
     L_W_en_max_pr = length(sc_data.W_en_max_pr)
     L_W_en_max_cs = length(sc_data.W_en_max_cs)
+    K = length(data_json["reliability"]["contingency"])
     c_p = data.violation_cost["p_bus_vio_cost"]
     c_q = data.violation_cost["q_bus_vio_cost"]
     c_s = data.violation_cost["s_vio_cost"]
@@ -92,7 +94,6 @@ function scopf_model(
     
     sc_data = convert_data(sc_data, backend)
 
-    
     core = ExaCore(T; backend =backend)
 
     #variables are indexed j,t,k or j,t (t always second if present)
@@ -244,6 +245,19 @@ function scopf_model(
     φ_jt_ln = variable(core, L_J_ln, L_T;)
     φ_jt_xf = variable(core, L_J_xf, L_T;)
 
+    
+    #Bound from 4.9.1 Penalty on post-contingency AC branch overload (157)
+    s_jtk_plus_ln = variable(core, length(sc_data.jtk_ln_flattened); lvar = zeros(length(sc_data.jtk_ln_flattened)))
+    s_jtk_plus_xf = variable(core, length(sc_data.jtk_xf_flattened); lvar = zeros(length(sc_data.jtk_xf_flattened)))
+    z_jtk_s_ln = variable(core, length(sc_data.jtk_ln_flattened);)
+    z_jtk_s_xf = variable(core, length(sc_data.jtk_xf_flattened);)
+    p_jtk_ln = variable(core, length(sc_data.jtk_ln_flattened);)
+    p_jtk_xf = variable(core, length(sc_data.jtk_xf_flattened);)
+    θ_itk = variable(core, I, L_T, K;)
+    p_t_sl = variable(core, L_T;)
+    z_tk_ctg = variable(core, L_T, K;)
+    z_t_ctg_min = variable(core, L_T;)
+    z_t_ctg_avg = variable(core, L_T;)
 
     #objective does not include contingencies rn
     #4.1 Market surplus objective
@@ -251,6 +265,9 @@ function scopf_model(
     #All objectives are negative so that we can minimize
 
     #Removing all uc variables, which include z_on, z_su, z_sd, z_sus
+
+    o2 = objective(core, z_t_ctg_min[t] for t in sc_data.periods)
+    o3 = objective(core, z_t_ctg_avg[t] for t in sc_data.periods)
 
     o6_t_pr = objective(core, -(-z_jt_en_pr[pr.j_pr, pr.t] 
                         - (z_jt_rgu_pr[pr.j_pr, pr.t] + z_jt_rgd_pr[pr.j_pr, pr.t] + z_jt_scr_pr[pr.j_pr, pr.t] + z_jt_nsc_pr[pr.j_pr, pr.t] + z_jt_rru_pr[pr.j_pr, pr.t] + 
@@ -268,6 +285,19 @@ function scopf_model(
     o6_en_min_pr = objective(core, z_w_en_min_pr[w] for w in 1:L_W_en_min_pr)
     o6_en_min_cs = objective(core, z_w_en_min_cs[w] for w in 1:L_W_en_min_cs)
 
+
+    if K>0
+        c4 = constraint(core, z_t_ctg_min[ind.t] - z_tk_ctg[ind.t, ind.k] for ind in sc_data.tk_index; lcon = fill(-Inf, size(sc_data.tk_index)))
+        c5 = constraint(core, z_t_ctg_avg[t]*K for t in sc_data.periods)
+        c5_a = constraint!(core, c5, ind.t => -z_tk_ctg[ind.t, ind.k] for ind in sc_data.tk_index)
+    else
+        c4 = constraint(core, z_t_ctg_min[t] for t in sc_data.periods)
+        c5 = constraint(core, z_t_ctg_avg[t] for t in sc_data.periods)
+    end
+
+    c10 = constraint(core, z_tk_ctg[ind.t, ind.k] for ind in sc_data.tk_index)
+    c10_ln = constraint!(core, c10, ln.t + L_T*(ln.ctg-1) => z_jtk_s_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened)
+    c10_xf = constraint!(core, c10, xf.t + L_T*(xf.ctg-1) => z_jtk_s_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened)
 
     #4.2.1 Bus power mismatch and penalized mismatch definitions
     c_11 = constraint(core, p_it_plus[b.i, b.t] - p_it[b.i, b.t] for b in sc_data.busarray; ucon = fill(Inf, size(sc_data.busarray)))
@@ -524,6 +554,42 @@ function scopf_model(
     #4.8.4 DC lines
     c156 = constraint(core, p_jt_fr_dc[dc.j_dc, dc.t] + p_jt_to_dc[dc.j_dc, dc.t] for dc in sc_data.dclinearray)
 
+    #4.9.1 Penalty on post-contingency AC branch overload
+    #ac split into ln and xf
+    c158_ln = constraint(core, ln.dt*c_s*s_jtk_plus_ln[ln.flat_jtk_ln] - z_jtk_s_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened)
+    c158_xf = constraint(core, xf.dt*c_s*s_jtk_plus_xf[xf.flat_jtk_xf] - z_jtk_s_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened)
+
+    #4.9.2 Post-contingency AC power flow limits
+    c159_ln = constraint(core, (p_jtk_ln[ln.flat_jtk_ln]^2 + q_jt_fr_ln[ln.j_ln, ln.t]^2)^0.5 - ln.s_max_ctg - s_jtk_plus_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened;
+    lcon = fill(-Inf, size(sc_data.jtk_ln_flattened)))
+    c159_xf = constraint(core, (p_jtk_xf[xf.flat_jtk_xf]^2 + q_jt_fr_xf[xf.j_xf, xf.t]^2)^0.5 - xf.s_max_ctg - s_jtk_plus_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened;
+    lcon = fill(-Inf, size(sc_data.jtk_xf_flattened)))
+    c160_ln = constraint(core, (p_jtk_ln[ln.flat_jtk_ln]^2 + q_jt_to_ln[ln.j_ln, ln.t]^2)^0.5 - ln.s_max_ctg - s_jtk_plus_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened;
+    lcon = fill(-Inf, size(sc_data.jtk_ln_flattened)))
+    c160_xf = constraint(core, (p_jtk_xf[xf.flat_jtk_xf]^2 + q_jt_to_xf[xf.j_xf, xf.t]^2)^0.5 - xf.s_max_ctg - s_jtk_plus_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened;
+    lcon = fill(-Inf, size(sc_data.jtk_xf_flattened)))
+
+    #4.9.3 Post-contingency AC branch real power flows
+    c161_ln = constraint(core, p_jtk_ln[ln.flat_jtk_ln] + ln.b_sr*ln.u_on*(θ_itk[ln.fr_bus, ln.t, ln.ctg] - θ_itk[ln.to_bus, ln.t, ln.ctg] - φ_jt_ln[ln.j_ln, ln.t]) for ln in sc_data.jtk_ln_flattened)
+    c161_xf = constraint(core, p_jtk_xf[xf.flat_jtk_xf] + xf.b_sr*xf.u_on*(θ_itk[xf.fr_bus, xf.t, xf.ctg] - θ_itk[xf.to_bus, xf.t, xf.ctg] - φ_jt_xf[xf.j_xf, xf.t]) for xf in sc_data.jtk_xf_flattened)
+
+    #4.9.4 Post-contingency real power balance
+    c162 = constraint(core, p_t_sl[t] for t in 1:L_T)
+    c162_pr = constraint!(core, c162, pr.t => -p_jt_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
+    c162_cs = constraint!(core, c162, cs.t => p_jt_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
+    c162_sh = constraint!(core, c162, sh.t => p_jt_sh[sh.j_sh, sh.t] for sh in sc_data.shuntarray)
+    c163 = constraint(core, -p_t_sl[b.t]/I for b in sc_data.k_busarray)
+    c163_ln_fr = constraint!(core, c163, ln.fr_bus + I*(ln.t-1) + I*L_T*(ln.ctg-1) => -p_jtk_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened)
+    c163_ln_to = constraint!(core, c163, ln.to_bus + I*(ln.t-1) + I*L_T*(ln.ctg-1) => p_jtk_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened)
+    c163_xf_fr = constraint!(core, c163, xf.fr_bus + I*(xf.t-1) + I*L_T*(xf.ctg-1) => -p_jtk_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened)
+    c163_xf_to = constraint!(core, c163, xf.to_bus + I*(xf.t-1) + I*L_T*(xf.ctg-1) => p_jtk_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened)
+    c163_pr = constraint!(core, c163, pr.bus + I*(pr.t-1) + I*L_T*(pr.k) => p_jt_pr[pr.j_pr, pr.t] for pr in sc_data.k_prarray)
+    c163_cs = constraint!(core, c163, cs.bus + I*(cs.t-1) + I*L_T*(cs.k) => -p_jt_cs[cs.j_cs, cs.t] for cs in sc_data.k_csarray)
+    c163_sh = constraint!(core, c163, sh.bus + I*(sh.t-1) + I*L_T*(sh.k) => p_jt_sh[sh.j_sh, sh.t] for sh in sc_data.k_shuntarray)
+    c163_dc_fr = constraint!(core, c163, dc.fr_bus + I*(dc.t-1) + I*L_T*(dc.ctg-1) => -p_jt_fr_dc[dc.j_dc, dc.t] for dc in sc_data.jtk_dc_flattened)
+    c163_dc_to = constraint!(core, c163, dc.to_bus + I*(dc.t-1) + I*L_T*(dc.ctg-1) => -p_jt_fr_dc[dc.j_dc, dc.t] for dc in sc_data.jtk_dc_flattened)
+
+
 
     model = ExaModel(core; kwargs...)
 
@@ -573,6 +639,8 @@ function scopf_model(
 
     unincluded_obj = -(z_jt_on_pr + z_jt_on_cs + z_jt_su_pr + z_jt_su_cs + z_jt_su_ln + z_jt_su_xf
                     + z_jt_sd_pr + z_jt_sd_cs + z_jt_sd_ln + z_jt_sd_xf + z_jt_sus_pr + z_jt_sus_cs)
+
+
     return model, sc_data, obj_vars, unincluded_obj
 
 end

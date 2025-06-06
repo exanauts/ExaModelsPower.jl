@@ -489,8 +489,9 @@ function get_as(dt, t)
     return a_start, a_mid, a_end
 end
 
-function parse_sc_data(data, uc_data)
+function parse_sc_data(data, uc_data, data_json)
     sc_data, lengths, cost_vector_pr, cost_vector_cs = parse_sc_data_static(data)
+    
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
     L_J_pr, L_J_cspr, L_J_sh) = lengths
     periods = data.periods
@@ -813,19 +814,82 @@ function parse_sc_data(data, uc_data)
         end
     end
 
+    jtk_ln_flattened = Vector{@NamedTuple{flat_jtk_ln::Int, ctg::Int, j::Int, j_ac::Int, j_ln::Int, to_bus::Int, fr_bus::Int, b_sr::Float64, s_max_ctg::Float64, u_on::Int, t::Int, dt::Float64}}()
+    flat_jtk_ln = 1
+    for ctg in data_json["reliability"]["contingency"], t in 1:length(sc_data.dt)
+        for component in ctg["components"]
+            for val in values(data.ac_line_lookup) 
+                if val["uid"] == component
+                    for uc in uc_data["time_series_output"]["ac_line"]
+                        if val["uid"] == uc["uid"]
+                            r = val["r"]
+                            x = val["x"]
+                            push!(jtk_ln_flattened, (flat_jtk_ln=flat_jtk_ln, ctg = parse(Int, match(r"\d+", ctg["uid"]).match)+1, j = parse(Int, match(r"\d+", val["uid"]).match)+1, j_ac = parse(Int, match(r"\d+", val["uid"]).match)+1, 
+                            j_ln = parse(Int, match(r"\d+", val["uid"]).match)+1, to_bus = parse(Int, match(r"\d+", val["to_bus"]).match)+1,
+                            fr_bus = parse(Int, match(r"\d+", val["fr_bus"]).match)+1, b_sr = -x / (x^2 + r^2), s_max_ctg = val["mva_ub_em"], u_on=uc["on_status"][t], t=t, dt = sc_data.dt[t]))
+                            flat_jtk_ln += 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    
+
+    jtk_xf_flattened = Vector{@NamedTuple{flat_jtk_xf::Int, ctg::Int, j::Int, j_ac::Int, j_xf::Int, to_bus::Int, fr_bus::Int, b_sr::Float64, s_max_ctg::Float64, u_on::Int, t::Int, dt::Float64}}()
+    flat_jtk_xf = 1
+    for ctg in data_json["reliability"]["contingency"], t in 1:length(sc_data.dt)
+        for component in ctg["components"]
+            for val in values(data.twt_lookup) 
+                if val["uid"] == component
+                    for uc in uc_data["time_series_output"]["two_winding_transformer"]
+                        if val["uid"] == uc["uid"]
+                            r = val["r"]
+                            x = val["x"]
+                            push!(jtk_xf_flattened, (flat_jtk_xf=flat_jtk_xf, ctg = parse(Int, match(r"\d+", ctg["uid"]).match)+1, j = parse(Int, match(r"\d+", val["uid"]).match)+1+ L_J_ln, j_ac = parse(Int, match(r"\d+", val["uid"]).match)+1+ L_J_ln, 
+                            j_xf = parse(Int, match(r"\d+", val["uid"]).match)+1, to_bus = parse(Int, match(r"\d+", val["to_bus"]).match)+1,
+                            fr_bus = parse(Int, match(r"\d+", val["fr_bus"]).match)+1, b_sr = -x / (x^2 + r^2), s_max_ctg = val["mva_ub_em"], u_on=uc["on_status"][t], t=t, dt = sc_data.dt[t]))
+                            flat_jtk_xf += 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    jtk_dc_flattened = Vector{@NamedTuple{flat_jtk_dc::Int, ctg::Int, j::Int, j_dc::Int, to_bus::Int, fr_bus::Int, t::Int, dt::Float64}}()
+    flat_jtk_dc = 1
+    for ctg in data_json["reliability"]["contingency"], t in 1:length(sc_data.dt)
+        for component in ctg["components"]
+            for val in values(data.dc_line_lookup) 
+                if val["uid"] == component
+                    push!(jtk_dc_flattened, (flat_jtk_dc=flat_jtk_dc, ctg = parse(Int, match(r"\d+", ctg["uid"]).match)+1, j = parse(Int, match(r"\d+", val["uid"]).match)+1+ L_J_ac, 
+                    j_dc = parse(Int, match(r"\d+", val["uid"]).match)+1, to_bus = parse(Int, match(r"\d+", val["to_bus"]).match)+1,
+                    fr_bus = parse(Int, match(r"\d+", val["fr_bus"]).match)+1, t=t, dt = sc_data.dt[t]))
+                    flat_jtk_dc += 1
+                end
+            end
+        end
+    end
+
 
     sc_time_data = (
         ;
         sc_data...,
         periods = periods,
 
+        tk_index = [(t=t, k=k) for t in periods, k in 1:length(data_json["reliability"]["contingency"])],
         busarray = [(;b..., t=t, dt=sc_data.dt[t]) for b in sc_data.bus, t in periods],
+        k_busarray = [(;b..., t=t, k=k) for b in sc_data.bus, t in periods, k in 1:length(data_json["reliability"]["contingency"])],
         shuntarray = [
             (;s..., t=t, u_sh = uc["step"][t])
             for s in sc_data.shunt, t in periods
             for uc in uc_data["time_series_output"]["shunt"]
             if s.uid == uc["uid"]
                 ],
+        k_shuntarray = [(;b..., t=t, k=k) for b in sc_data.shunt, t in periods, k in 1:length(data_json["reliability"]["contingency"])],
+       
 
         preservearray = [(;n=r.n, n_p=r.n_p, uid=r.uid, c_rgu=r.c_rgu, c_rgd=r.c_rgd, c_scr=r.c_scr, c_nsc=r.c_nsc, c_rru=r.c_rru, c_rrd=r.c_rrd,
         σ_rgu=r.σ_rgu, σ_rgd=r.σ_rgd, σ_scr=r.σ_scr, σ_nsc=r.σ_nsc, p_rru_min=r.p_rru_min[t], p_rrd_min=r.p_rrd_min[t],
@@ -834,6 +898,7 @@ function parse_sc_data(data, uc_data)
         qreservearray = [(;n=q.n, n_q=q.n_q, uid=q.uid, c_qru=q.c_qru, c_qrd=q.c_qrd, q_qru_min=q.q_qru_min[t], q_qrd_min=q.q_qrd_min[t], t=t, dt = sc_data.dt[t])
         for q in sc_data.reactive_reserve, t in periods],
 
+        k_prarray = [(;b..., t=t, k=k) for b in sc_data.prod, t in periods, k in 1:length(data_json["reliability"]["contingency"])],
         prarray = [(;j=p.j, j_prcs=p.j_prcs, j_pr=p.j_pr, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, c_su = p.c_su, p_ru=p.p_ru, p_rd=p.p_rd,  
         p_ru_su=p.p_ru_su, p_rd_sd=p.p_rd_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
         c_rru_off=p.c_rru_off[t], c_rrd_on=p.c_rrd_on[t], c_rrd_off=p.c_rrd_off[t], c_qru=p.c_qru[t], c_qrd=p.c_qrd[t], p_rgu_max=p.p_rgu_max,
@@ -880,6 +945,8 @@ function parse_sc_data(data, uc_data)
         if parse(Int, match(r"\d+", val["uid"]).match) < L_J_pr && val["q_linear_cap"]==1
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
         if p.uid == uc["uid"]],
+
+        k_csarray = [(;b..., t=t, k=k) for b in sc_data.cons, t in periods, k in 1:length(data_json["reliability"]["contingency"])],
 
         csarray = [(;j=p.j, j_prcs=p.j_prcs, j_cs=p.j_cs, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, c_su=p.c_su, p_ru=p.p_ru, p_rd=p.p_rd,  
         p_ru_su=p.p_ru_su, p_rd_sd=p.p_rd_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
@@ -961,7 +1028,10 @@ function parse_sc_data(data, uc_data)
         W_en_min_cs=W_en_min_cs,
         T_w_en_min_pr=T_w_en_min_pr,
         T_w_en_min_cs=T_w_en_min_cs,
-        T_sus_jft=T_sus_jft
+        T_sus_jft=T_sus_jft,
+        jtk_ln_flattened=jtk_ln_flattened,
+        jtk_xf_flattened=jtk_xf_flattened,
+        jtk_dc_flattened=jtk_dc_flattened
 
     )
 
