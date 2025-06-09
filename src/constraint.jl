@@ -103,7 +103,7 @@ end
 
 #storage constraints
 
-#Formulation from Geth, Carleton (2020)
+#Formulation from Geth, Coffrin, Fobes (2020)
 function c_active_stor_power(s, pst, pstd, pstc, I2)
     return pst + pstd - pstc - s.Pexts - s.Zr*I2
 end

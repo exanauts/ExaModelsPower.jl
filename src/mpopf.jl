@@ -79,9 +79,6 @@ function build_base_polar_mpopf(core, data, N, Nbus)
     q = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
     #Storage specific variables
-    #charge or discharge from battery to grid
-    pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
-    pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
     #active/reactive power from bus into storage
     pst = variable(core, size(data.storage, 1), N)
@@ -171,8 +168,6 @@ function build_base_polar_mpopf(core, data, N, Nbus)
             qg = qg,
             p = p,        
             q = q, 
-            pstc = pstc,
-            pstd = pstd, 
             pst = pst,
             qst = qst,
             I2 = I2,
@@ -197,9 +192,6 @@ function build_base_rect_mpopf(core, data, N, Nbus)
     q = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
     #Storage specific variables
-    #charge or discharge from battery to grid
-    pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
-    pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
     #active/reactive power from bus into storage
     pst = variable(core, size(data.storage, 1), N)
@@ -282,8 +274,6 @@ function build_base_rect_mpopf(core, data, N, Nbus)
             qg = qg,
             p = p,
             q = q,
-            pstc = pstc,
-            pstd = pstd, 
             pst = pst,
             qst = qst,
             I2 = I2,
@@ -310,69 +300,74 @@ function build_base_rect_mpopf(core, data, N, Nbus)
 end
 
 
-
-
 function build_polar_mpopf(data, Nbus, N; backend = nothing, T = Float64, storage_complementarity_constraint = false, kwargs...)
     core = ExaCore(T; backend = backend)
 
     vars, cons = build_base_polar_mpopf(core, data, N, Nbus)
 
-    va, vm, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
+    if length(data.storarray) > 0
+        va, vm, pg, qg, p, q, pst, qst, I2, qint, E = vars
 
-    (c_ref_angle, 
-    c_to_active_power_flow, 
-    c_to_reactive_power_flow, 
-    c_from_active_power_flow,
-    c_from_reactive_power_flow,
-    c_phase_angle_diff,
-    c_active_power_balance,
-    c_reactive_power_balance,
-    c_from_thermal_limit,
-    c_to_thermal_limit,
-    c_ramp_rate) = cons
+        (c_ref_angle, 
+        c_to_active_power_flow, 
+        c_to_reactive_power_flow, 
+        c_from_active_power_flow,
+        c_from_reactive_power_flow,
+        c_phase_angle_diff,
+        c_active_power_balance,
+        c_reactive_power_balance,
+        c_from_thermal_limit,
+        c_to_thermal_limit,
+        c_ramp_rate) = cons
 
-    #adding storage constraints
-    c_active_storage_power = constraint(core, c_active_stor_power(s, pst[s.c, s.t], pstd[s.c, s.t], pstc[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
+        #charge or discharge from battery to grid
+        pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
+        pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
-    c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
+        #adding storage constraints
+        c_active_storage_power = constraint(core, c_active_stor_power(s, pst[s.c, s.t], pstd[s.c, s.t], pstc[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_ohms = constraint(core, c_ohms_polar(pst[s.c, s.t], qst[s.c, s.t], vm[s.bus, s.t], I2[s.c, s.t]) for s in data.storarray)
+        c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_storage_state = constraint(core, c_stor_state(s, E[s.c, s.t], E[s.c, s.t - 1], pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray[:, 2:N])
+        c_ohms = constraint(core, c_ohms_polar(pst[s.c, s.t], qst[s.c, s.t], vm[s.bus, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_storage_state_init = constraint(core, c_stor_state(s, E[s.c, s.t], s.Einit, pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray[:, 1])
+        c_storage_state = constraint(core, c_stor_state(s, E[s.c, s.t], E[s.c, s.t - 1], pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray[:, 2:N])
 
-    c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = lcon = fill(-Inf, size(data.storarray)))
+        c_storage_state_init = constraint(core, c_stor_state(s, E[s.c, s.t], s.Einit, pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray[:, 1])
 
-    c_discharge_thermal_limit = constraint(core, c_discharge_lim(pstd[s.c, s.t], pstc[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+        c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = lcon = fill(-Inf, size(data.storarray)))
 
-    #Complimentarity constraint
-    if storage_complementarity_constraint
-        c_complementarity = constraint(core, c_comp(pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray)
+        c_discharge_thermal_limit = constraint(core, c_discharge_lim(pstd[s.c, s.t], pstc[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+
+        #Complimentarity constraint
+        if storage_complementarity_constraint
+            c_complementarity = constraint(core, c_comp(pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray)
+        end
+        
+
+        cons =  (
+            c_ref_angle = c_ref_angle,
+            c_to_active_power_flow = c_to_active_power_flow,
+            c_to_reactive_power_flow = c_to_reactive_power_flow,
+            c_from_active_power_flow = c_from_active_power_flow,
+            c_from_reactive_power_flow = c_from_reactive_power_flow,
+            c_phase_angle_diff = c_phase_angle_diff,
+            c_active_power_balance = c_active_power_balance,
+            c_reactive_power_balance = c_reactive_power_balance,
+            c_from_thermal_limit = c_from_thermal_limit,
+            c_to_thermal_limit = c_to_thermal_limit,
+            c_ramp_rate = c_ramp_rate,
+            c_active_storage_power = c_active_storage_power,
+            c_reactive_storage_power = c_reactive_storage_power,
+            c_ohms = c_ohms,
+            c_storage_state = c_storage_state,
+            c_storage_state_init = c_storage_state_init,
+            c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
+            c_discharge_thermal_limit = c_discharge_thermal_limit
+        )
+
+        vars = va, vm, pg, qg, p, q, pst, qst, I2, qint, E, pstd, pstc
     end
-    
-
-    cons =  (
-        c_ref_angle = c_ref_angle,
-        c_to_active_power_flow = c_to_active_power_flow,
-        c_to_reactive_power_flow = c_to_reactive_power_flow,
-        c_from_active_power_flow = c_from_active_power_flow,
-        c_from_reactive_power_flow = c_from_reactive_power_flow,
-        c_phase_angle_diff = c_phase_angle_diff,
-        c_active_power_balance = c_active_power_balance,
-        c_reactive_power_balance = c_reactive_power_balance,
-        c_from_thermal_limit = c_from_thermal_limit,
-        c_to_thermal_limit = c_to_thermal_limit,
-        c_ramp_rate = c_ramp_rate,
-        c_active_storage_power = c_active_storage_power,
-        c_reactive_storage_power = c_reactive_storage_power,
-        c_ohms = c_ohms,
-        c_storage_state = c_storage_state,
-        c_storage_state_init = c_storage_state_init,
-        c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
-        c_discharge_thermal_limit = c_discharge_thermal_limit
-    )
-
     
     model = ExaModel(core; kwargs...)
     return model, vars, cons
@@ -383,62 +378,69 @@ function build_rect_mpopf(data, Nbus, N; backend = nothing, T = Float64, storage
 
     vars, cons = build_base_rect_mpopf(core, data, N, Nbus)
 
-    vr, vim, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
+    if length(data.storarray) > 0
+        vr, vim, pg, qg, p, q, pst, qst, I2, qint, E = vars
 
-    (c_ref_angle, 
-    c_to_active_power_flow, 
-    c_to_reactive_power_flow, 
-    c_from_active_power_flow,
-    c_from_reactive_power_flow,
-    c_phase_angle_diff,
-    c_active_power_balance,
-    c_reactive_power_balance,
-    c_from_thermal_limit,
-    c_to_thermal_limit,
-    c_voltage_magnitude,
-    c_ramp_rate) = cons
-    
-    #adding storage constraints
-    c_active_storage_power = constraint(core, c_active_stor_power(s, pst[s.c, s.t], pstd[s.c, s.t], pstc[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
+        (c_ref_angle, 
+        c_to_active_power_flow, 
+        c_to_reactive_power_flow, 
+        c_from_active_power_flow,
+        c_from_reactive_power_flow,
+        c_phase_angle_diff,
+        c_active_power_balance,
+        c_reactive_power_balance,
+        c_from_thermal_limit,
+        c_to_thermal_limit,
+        c_voltage_magnitude,
+        c_ramp_rate) = cons
 
-    c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
+        #charge or discharge from battery to grid
+        pstc = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pcmax, 1, N))
+        pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
+        
+        #adding storage constraints
+        c_active_storage_power = constraint(core, c_active_stor_power(s, pst[s.c, s.t], pstd[s.c, s.t], pstc[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_ohms = constraint(core, c_ohms_rect(pst[s.c, s.t], qst[s.c, s.t], vr[s.bus, s.t], vim[s.bus, s.t], I2[s.c, s.t]) for s in data.storarray)
+        c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_storage_state = constraint(core, c_stor_state(s, E[s.c, s.t], E[s.c, s.t - 1], pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray[:, 2:N])
+        c_ohms = constraint(core, c_ohms_rect(pst[s.c, s.t], qst[s.c, s.t], vr[s.bus, s.t], vim[s.bus, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_storage_state_init = constraint(core, c_stor_state(s, E[s.c, s.t], s.Einit, pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray[:, 1])
+        c_storage_state = constraint(core, c_stor_state(s, E[s.c, s.t], E[s.c, s.t - 1], pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray[:, 2:N])
 
-    c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = lcon = fill(-Inf, size(data.storarray)))
+        c_storage_state_init = constraint(core, c_stor_state(s, E[s.c, s.t], s.Einit, pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray[:, 1])
 
-    c_discharge_thermal_limit = constraint(core, c_discharge_lim(pstd[s.c, s.t], pstc[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+        c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = lcon = fill(-Inf, size(data.storarray)))
 
-    #Complimentarity constraint
-    if storage_complementarity_constraint
-        c_complementarity = constraint(core, c_comp(pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray)
+        c_discharge_thermal_limit = constraint(core, c_discharge_lim(pstd[s.c, s.t], pstc[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+
+        #Complimentarity constraint
+        if storage_complementarity_constraint
+            c_complementarity = constraint(core, c_comp(pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray)
+        end
+
+        cons =  (
+            c_ref_angle = c_ref_angle,
+            c_to_active_power_flow = c_to_active_power_flow,
+            c_to_reactive_power_flow = c_to_reactive_power_flow,
+            c_from_active_power_flow = c_from_active_power_flow,
+            c_from_reactive_power_flow = c_from_reactive_power_flow,
+            c_phase_angle_diff = c_phase_angle_diff,
+            c_active_power_balance = c_active_power_balance,
+            c_reactive_power_balance = c_reactive_power_balance,
+            c_from_thermal_limit = c_from_thermal_limit,
+            c_to_thermal_limit = c_to_thermal_limit,
+            c_voltage_magnitude = c_voltage_magnitude,
+            c_ramp_rate = c_ramp_rate,
+            c_active_storage_power = c_active_storage_power,
+            c_reactive_storage_power = c_reactive_storage_power,
+            c_ohms = c_ohms,
+            c_storage_state = c_storage_state,
+            c_storage_state_init = c_storage_state_init,
+            c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
+            c_discharge_thermal_limit = c_discharge_thermal_limit
+        )
+        vars = vr, vim, pg, qg, p, q, pst, qst, I2, qint, E, pstc, pstd
     end
-
-    cons =  (
-        c_ref_angle = c_ref_angle,
-        c_to_active_power_flow = c_to_active_power_flow,
-        c_to_reactive_power_flow = c_to_reactive_power_flow,
-        c_from_active_power_flow = c_from_active_power_flow,
-        c_from_reactive_power_flow = c_from_reactive_power_flow,
-        c_phase_angle_diff = c_phase_angle_diff,
-        c_active_power_balance = c_active_power_balance,
-        c_reactive_power_balance = c_reactive_power_balance,
-        c_from_thermal_limit = c_from_thermal_limit,
-        c_to_thermal_limit = c_to_thermal_limit,
-        c_voltage_magnitude = c_voltage_magnitude,
-        c_ramp_rate = c_ramp_rate,
-        c_active_storage_power = c_active_storage_power,
-        c_reactive_storage_power = c_reactive_storage_power,
-        c_ohms = c_ohms,
-        c_storage_state = c_storage_state,
-        c_storage_state_init = c_storage_state_init,
-        c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
-        c_discharge_thermal_limit = c_discharge_thermal_limit
-    )
 
     model = ExaModel(core; kwargs...)
     return model, vars, cons
@@ -450,54 +452,61 @@ function build_polar_mpopf(data, Nbus, N, discharge_func::Function; backend = no
 
     vars, cons = build_base_polar_mpopf(core, data, N, Nbus)
 
-    va, vm, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
+    if length(data.storarray) > 0
+        va, vm, pg, qg, p, q, pst, qst, I2, qint, E = vars
 
-    (c_ref_angle, 
-    c_to_active_power_flow, 
-    c_to_reactive_power_flow, 
-    c_from_active_power_flow,
-    c_from_reactive_power_flow,
-    c_phase_angle_diff,
-    c_active_power_balance,
-    c_reactive_power_balance,
-    c_from_thermal_limit,
-    c_to_thermal_limit,
-    c_ramp_rate) = cons
+        (c_ref_angle, 
+        c_to_active_power_flow, 
+        c_to_reactive_power_flow, 
+        c_from_active_power_flow,
+        c_from_reactive_power_flow,
+        c_phase_angle_diff,
+        c_active_power_balance,
+        c_reactive_power_balance,
+        c_from_thermal_limit,
+        c_to_thermal_limit,
+        c_ramp_rate) = cons
 
-    c_active_storage_power = constraint(core, c_active_storage_power_smooth(s, pst[s.c, s.t], pstd[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
+        #discharge or charge from battery to grid (positive or negative)
+        pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
 
-    c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
+        c_active_storage_power = constraint(core, c_active_storage_power_smooth(s, pst[s.c, s.t], pstd[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_ohms = constraint(core, c_ohms_polar(pst[s.c, s.t], qst[s.c, s.t], vm[s.bus, s.t], I2[s.c, s.t]) for s in data.storarray)
+        c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_storage_state = constraint(core, c_storage_state_smooth(s, E[s.c, s.t], E[s.c, s.t - 1], discharge_func, pstd[s.c, s.t]) for s in data.storarray[:, 2:N])
+        c_ohms = constraint(core, c_ohms_polar(pst[s.c, s.t], qst[s.c, s.t], vm[s.bus, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_storage_state_init = constraint(core, c_storage_state_smooth(s, E[s.c, s.t], s.Einit, discharge_func, pstd[s.c, s.t]) for s in data.storarray[:, 1])
+        c_storage_state = constraint(core, c_storage_state_smooth(s, E[s.c, s.t], E[s.c, s.t - 1], discharge_func, pstd[s.c, s.t]) for s in data.storarray[:, 2:N])
 
-    c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = lcon = fill(-Inf, size(data.storarray)))
+        c_storage_state_init = constraint(core, c_storage_state_smooth(s, E[s.c, s.t], s.Einit, discharge_func, pstd[s.c, s.t]) for s in data.storarray[:, 1])
 
-    c_discharge_thermal_limit = constraint(core, c_discharge_limit_smooth(pstd[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+        c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = lcon = fill(-Inf, size(data.storarray)))
 
-    cons =  (
-        c_ref_angle = c_ref_angle,
-        c_to_active_power_flow = c_to_active_power_flow,
-        c_to_reactive_power_flow = c_to_reactive_power_flow,
-        c_from_active_power_flow = c_from_active_power_flow,
-        c_from_reactive_power_flow = c_from_reactive_power_flow,
-        c_phase_angle_diff = c_phase_angle_diff,
-        c_active_power_balance = c_active_power_balance,
-        c_reactive_power_balance = c_reactive_power_balance,
-        c_from_thermal_limit = c_from_thermal_limit,
-        c_to_thermal_limit = c_to_thermal_limit,
-        c_ramp_rate = c_ramp_rate,
-        c_active_storage_power = c_active_storage_power,
-        c_reactive_storage_power = c_reactive_storage_power,
-        c_ohms = c_ohms,
-        c_storage_state = c_storage_state,
-        c_storage_state_init = c_storage_state_init,
-        c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
-        c_discharge_thermal_limit = c_discharge_thermal_limit
-    )
+        c_discharge_thermal_limit = constraint(core, c_discharge_limit_smooth(pstd[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+
+        cons =  (
+            c_ref_angle = c_ref_angle,
+            c_to_active_power_flow = c_to_active_power_flow,
+            c_to_reactive_power_flow = c_to_reactive_power_flow,
+            c_from_active_power_flow = c_from_active_power_flow,
+            c_from_reactive_power_flow = c_from_reactive_power_flow,
+            c_phase_angle_diff = c_phase_angle_diff,
+            c_active_power_balance = c_active_power_balance,
+            c_reactive_power_balance = c_reactive_power_balance,
+            c_from_thermal_limit = c_from_thermal_limit,
+            c_to_thermal_limit = c_to_thermal_limit,
+            c_ramp_rate = c_ramp_rate,
+            c_active_storage_power = c_active_storage_power,
+            c_reactive_storage_power = c_reactive_storage_power,
+            c_ohms = c_ohms,
+            c_storage_state = c_storage_state,
+            c_storage_state_init = c_storage_state_init,
+            c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
+            c_discharge_thermal_limit = c_discharge_thermal_limit
+        )
+
+        vars = va, vm, pg, qg, p, q, pst, qst, I2, qint, E, pstd
+    end
 
     model = ExaModel(core; kwargs...)
     return model, vars, cons
@@ -506,59 +515,66 @@ end
 function build_rect_mpopf(data, Nbus, N, discharge_func::Function; backend = nothing, T = Float64, kwargs...)
 
     core = ExaCore(T; backend = backend)
-
     vars, cons = build_base_rect_mpopf(core, data, N, Nbus)
 
-    vr, vim, pg, qg, p, q, pstc, pstd, pst, qst, I2, qint, E = vars
+    if length(data.storarray) > 0
+        vr, vim, pg, qg, p, q, pst, qst, I2, qint, E = vars
 
-    (c_ref_angle, 
-    c_to_active_power_flow, 
-    c_to_reactive_power_flow, 
-    c_from_active_power_flow,
-    c_from_reactive_power_flow,
-    c_phase_angle_diff,
-    c_active_power_balance,
-    c_reactive_power_balance,
-    c_from_thermal_limit,
-    c_to_thermal_limit,
-    c_voltage_magnitude,
-    c_ramp_rate) = cons
+        (c_ref_angle, 
+        c_to_active_power_flow, 
+        c_to_reactive_power_flow, 
+        c_from_active_power_flow,
+        c_from_reactive_power_flow,
+        c_phase_angle_diff,
+        c_active_power_balance,
+        c_reactive_power_balance,
+        c_from_thermal_limit,
+        c_to_thermal_limit,
+        c_voltage_magnitude,
+        c_ramp_rate) = cons
 
-    c_active_storage_power = constraint(core, c_active_storage_power_smooth(s, pst[s.c, s.t], pstd[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
+        #discharge or charge from battery to grid (can be positive or negative)
+        pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
+        
+        c_active_storage_power = constraint(core, c_active_storage_power_smooth(s, pst[s.c, s.t], pstd[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_ohms = constraint(core, c_ohms_rect(pst[s.c, s.t], qst[s.c, s.t], vr[s.bus, s.t], vim[s.bus, s.t], I2[s.c, s.t]) for s in data.storarray)
+        c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_storage_state = constraint(core, c_storage_state_smooth(s, E[s.c, s.t], E[s.c, s.t - 1], discharge_func, pstd[s.c, s.t]) for s in data.storarray[:, 2:N])
+        c_ohms = constraint(core, c_ohms_rect(pst[s.c, s.t], qst[s.c, s.t], vr[s.bus, s.t], vim[s.bus, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_storage_state_init = constraint(core, c_storage_state_smooth(s, E[s.c, s.t], s.Einit, discharge_func, pstd[s.c, s.t]) for s in data.storarray[:, 1])
+        c_storage_state = constraint(core, c_storage_state_smooth(s, E[s.c, s.t], E[s.c, s.t - 1], discharge_func, pstd[s.c, s.t]) for s in data.storarray[:, 2:N])
 
-    c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = lcon = fill(-Inf, size(data.storarray)))
+        c_storage_state_init = constraint(core, c_storage_state_smooth(s, E[s.c, s.t], s.Einit, discharge_func, pstd[s.c, s.t]) for s in data.storarray[:, 1])
 
-    c_discharge_thermal_limit = constraint(core, c_discharge_limit_smooth(pstd[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+        c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = lcon = fill(-Inf, size(data.storarray)))
 
-    cons =  (
-        c_ref_angle = c_ref_angle,
-        c_to_active_power_flow = c_to_active_power_flow,
-        c_to_reactive_power_flow = c_to_reactive_power_flow,
-        c_from_active_power_flow = c_from_active_power_flow,
-        c_from_reactive_power_flow = c_from_reactive_power_flow,
-        c_phase_angle_diff = c_phase_angle_diff,
-        c_active_power_balance = c_active_power_balance,
-        c_reactive_power_balance = c_reactive_power_balance,
-        c_from_thermal_limit = c_from_thermal_limit,
-        c_to_thermal_limit = c_to_thermal_limit,
-        c_voltage_magnitude = c_voltage_magnitude,
-        c_ramp_rate = c_ramp_rate,
-        c_active_storage_power = c_active_storage_power,
-        c_reactive_storage_power = c_reactive_storage_power,
-        c_ohms = c_ohms,
-        c_storage_state = c_storage_state,
-        c_storage_state_init = c_storage_state_init,
-        c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
-        c_discharge_thermal_limit = c_discharge_thermal_limit
-    )
+        c_discharge_thermal_limit = constraint(core, c_discharge_limit_smooth(pstd[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+
+        cons =  (
+            c_ref_angle = c_ref_angle,
+            c_to_active_power_flow = c_to_active_power_flow,
+            c_to_reactive_power_flow = c_to_reactive_power_flow,
+            c_from_active_power_flow = c_from_active_power_flow,
+            c_from_reactive_power_flow = c_from_reactive_power_flow,
+            c_phase_angle_diff = c_phase_angle_diff,
+            c_active_power_balance = c_active_power_balance,
+            c_reactive_power_balance = c_reactive_power_balance,
+            c_from_thermal_limit = c_from_thermal_limit,
+            c_to_thermal_limit = c_to_thermal_limit,
+            c_voltage_magnitude = c_voltage_magnitude,
+            c_ramp_rate = c_ramp_rate,
+            c_active_storage_power = c_active_storage_power,
+            c_reactive_storage_power = c_reactive_storage_power,
+            c_ohms = c_ohms,
+            c_storage_state = c_storage_state,
+            c_storage_state_init = c_storage_state_init,
+            c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit,
+            c_discharge_thermal_limit = c_discharge_thermal_limit
+        )
+
+        vars = vr, vim, pg, qg, p, q, pst, qst, I2, qint, E, pstd
+    end
 
     model = ExaModel(core; kwargs...)
     return model, vars, cons

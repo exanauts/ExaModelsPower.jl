@@ -1,6 +1,9 @@
 # ExaModelsPower.jl
 ExaModelsPower.jl is an optimal power flow models using ExaModels.jl
 
+![CI](https://github.com/exanauts/ExaModelsPower.jl/actions/workflows/ci.yml/badge.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 ## Usage
 ### Static optimal power flow
 ```julia
@@ -9,7 +12,7 @@ using ExaModelsPower, MadNLP, MadNLPGPU, CUDA
 model, vars, cons = opf_model(
     "pglib_opf_case118_ieee.m";
     backend = CUDABackend(),
-    symbol = "polar"
+    form = :polar
 )
 result = madnlp(model; tol=1e-6)
 ```
