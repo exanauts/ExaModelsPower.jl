@@ -12,7 +12,7 @@ using ExaModelsPower, MadNLP, MadNLPGPU, CUDA
 model, vars, cons = opf_model(
     "pglib_opf_case118_ieee.m";
     backend = CUDABackend(),
-    symbol = "polar"
+    form = :polar
 )
 result = madnlp(model; tol=1e-6)
 ```
