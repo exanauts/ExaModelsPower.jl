@@ -180,6 +180,24 @@ function build_rect_opf(data; backend = nothing, T=Float64, kwargs...)
     return model, vars, cons
 end
 
+"""
+    opf_model(filename; backend, T, form)
+
+Return `ExaModel`, variables, and constraints for a static AC Optimal Power Flow (ACOPF) problem from the given file.
+
+# Arguments
+- `filename::String`: Path to the data file.
+- `backend`: The solver backend to use. Default if nothing.
+- `T`: The numeric type to use (default is `Float64`).
+- `form`: Voltage representation, either `:polar` or `:rect`. Default is `:polar`.
+- `kwargs...`: Additional keyword arguments passed to the model builder.
+
+# Returns
+A vector `(model, variables, constraints)`:
+- `model`: An `ExaModel` object.
+- `variables`: NamedTuple of model variables.
+- `constraints`: NamedTuple of model constraints.
+"""
 function opf_model(
     filename;
     backend = nothing,

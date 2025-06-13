@@ -580,6 +580,45 @@ function build_rect_mpopf(data, Nbus, N, discharge_func::Function; backend = not
     return model, vars, cons
 end
 
+"""
+    mpopf_model(filename, curve; kwargs...)
+    mpopf_model(filename, active_power_data, reactive_power_data; kwargs...)
+    mpopf_model(filename, curve, discharge_func::Function; kwargs...)
+    mpopf_model(filename, active_power_data, reactive_power_data, discharge_func::Function; kwargs...)
+
+Construct a multi-period AC optimal power flow (MPOPF) model using different formats of load input data.
+
+# Arguments
+
+- `filename::String`: Path to the network data file (e.g., MATPOWER).
+- `curve::AbstractVector`: A time series of demand multiplier values.
+- `active_power_data::String`: Path to a matrix of active power loads (Pd) per bus and time.
+- `reactive_power_data::String`: Path to a matrix of reactive power loads (Qd).
+- `discharge_func::Function`: (Optional) A function specifying battery discharge losses.
+
+## Keyword Arguments
+
+- `N::Int`: Number of time periods (inferred if not provided).
+- `corrective_action_ratio::Float64`: Ratio of corrective power action allowed (default = 0.1).
+- `backend`: Optimization solver backend (deault = nothing).
+- `form::Symbol`: Power flow formulation, either `:polar` or `:rect` (default = `:polar`).
+- `T::Type`: Floating-point type for numeric variables (default = `Float64`).
+- `storage_complementarity_constraint::Bool`: Whether to enforce complementarity for storage (only for some methods, default = false).
+- `kwargs...`: Additional arguments passed to the solver or builder.
+
+# Returns
+
+A vector `(model::ExaModel object, variables::NamedTuple of variables, constraints::NamedTuple of constraints)` representing the MPOPF model.
+
+# Method Variants
+
+This function is overloaded for different combinations of input:
+
+1. `mpopf_model(filename, curve)`
+2. `mpopf_model(filename, active_power_data, reactive_power_data)`
+3. `mpopf_model(filename, curve, discharge_func)`
+4. `mpopf_model(filename, active_power_data, reactive_power_data, discharge_func)`
+"""
 function mpopf_model(
     filename, curve;
     N = length(curve),
