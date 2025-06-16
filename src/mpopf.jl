@@ -16,8 +16,7 @@ function parse_mp_power_data(filename, N, corrective_action_ratio)
         busarray = [(;b..., t = t) for b in data.bus, t in 1:N ],
         arcarray = [(;a..., t = t) for a in data.arc, t in 1:N ],
         genarray = [(;g..., t = t) for g in data.gen, t in 1:N ],
-        storarray = isempty(data.storage) ? empty_stor : [(;s..., t = t) for s in data.storage, t in 1:N],
-        #storarray = isempty(data.storage) ? empty_data =  empty_stor : [(;s..., t = t) for s in data.storage, t in 1:N],
+        storarray = isempty(data.storage) ? empty_data =  empty_stor : [(;s..., t = t) for s in data.storage, t in 1:N],
         Δp = corrective_action_ratio .* (data.pmax .- data.pmin)
     )
     
@@ -143,7 +142,7 @@ function build_base_polar_mpopf(core, data, N, Nbus)
 
     c_ramp_rate = constraint(
         core,
-        c_ramp(pg[g.i, g.t -1], pg[g.i, g.t]) for g in data.genarray[:, 2:N];
+        (c_ramp(pg[g.i, g.t -1], pg[g.i, g.t]) for g in data.genarray[:, 2:N]);
         lcon = repeat(-data.Δp,  1, N-1),
         ucon = repeat( data.Δp, 1, N-1)
     )
