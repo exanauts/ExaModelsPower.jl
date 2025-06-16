@@ -142,7 +142,7 @@ function build_base_polar_mpopf(core, data, N, Nbus)
 
     c_ramp_rate = constraint(
         core,
-        (c_ramp(pg[g.i, g.t -1], pg[g.i, g.t]) for g in data.genarray[:, 2:N]);
+        c_ramp(pg[g.i, g.t-1], pg[g.i, g.t]) for g in data.genarray[:, 2:N];
         lcon = repeat(-data.Δp,  1, N-1),
         ucon = repeat( data.Δp, 1, N-1)
     )
