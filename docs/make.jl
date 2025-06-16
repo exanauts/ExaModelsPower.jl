@@ -1,5 +1,5 @@
 using Pkg
-Pkg.activate("..")  # assumes docs/ is a subfolder of the main project
+Pkg.activate(@__DIR__)
 
 using Documenter, ExaModelsPower, DocumenterCitations, Literate
 
@@ -54,4 +54,3 @@ makedocs(;
 
 deploydocs(repo = "github.com/exanauts/ExaModelsPower.jl.git"; push_preview = true)
 
-#- The step-by-step tutorials of using ExaModelsPower.jl can be found in [OPF tutorial](@ref opf_demo) and [MPOPF tutorial](@ref mpopf_demo).
