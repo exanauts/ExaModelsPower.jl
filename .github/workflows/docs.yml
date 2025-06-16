@@ -17,7 +17,11 @@ jobs:
         with:
           version: '1.9'
       - name: Install dependencies
-        run: julia --project=docs/ -e 'using Pkg; Pkg.Registry.update(); Pkg.develop(PackageSpec(path=pwd())); Pkg.add(["Documenter", "DocumenterCitations", "Literate"]); Pkg.instantiate()'
+        run: |
+            julia --project=docs/ -e 'using Pkg; Pkg.Registry.update(); Pkg.develop(PackageSpec(path=pwd())); Pkg.add(["Documenter", "DocumenterCitations", "Literate"]); Pkg.instantiate()'
+            julia --project=docs/ -e 'using Pkg; println("Installed packages: ", Pkg.installed())'
+      - name: Verify environment
+        run: julia --project=docs/ -e 'using Pkg; println("Environment setup successful!")'
       - name: Build and deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token
