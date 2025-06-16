@@ -11,7 +11,8 @@ if !(@isdefined _PAGES)
             "mpopf_demo.md"
         ],
         "OPF Formulations" => "opfs_doc.md",
-        "API Manual" => "core.md"
+        "API Manual" => "core.md",
+        "References" => "ref.md"
     ]
 end
 
@@ -33,10 +34,24 @@ for jl_filename in _JL_FILENAMES
 
 end
 
+bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
 makedocs(;
-    sitename = "My Documentation",
+    plugins = [bib],
+    sitename = "ExaModelsPower.jl",
     modules = [ExaModelsPower],
     remotes = nothing,
-    pages = _PAGES
+    authors = "Sungho Shin, Sanjay Johnson",
+    format = Documenter.HTML(
+        assets = ["assets/citations.css"],
+        prettyurls = true,
+        sidebar_sitename = true,
+        collapselevel = 1,
+    ),
+    pages = _PAGES,
+    clean = false
 )
+
+deploydocs(repo = "github.com/exanauts/ExaModelsPower.jl.git"; push_preview = true)
+
+#- The step-by-step tutorials of using ExaModelsPower.jl can be found in [OPF tutorial](@ref opf_demo) and [MPOPF tutorial](@ref mpopf_demo).

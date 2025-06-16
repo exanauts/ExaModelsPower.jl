@@ -7,9 +7,9 @@ The static OPF is the most basic version of the OPF, implemented over just a sin
 
 A central complexity of the ACOPF is calculating the power transfer along transmission lines, which requires the following nonlinear constraint in polar coordinates, where G and B are parameters of the line, n and m are bus indeces, and V and θ represent voltage and phase angle. 
 
-$$$
+```math
 P_n = \sum_{mk} V_n V_m \left( G_{nmk} \cos \theta_{nm} + B_{nmk} \sin \theta_{nm} \right)
-$$$
+```
 
 Due to the computational challenges introduced by these equations, ExaModelsPower.jl implements the OPF in both polar and rectangular coordinates to provide flexibility in the case that a certain algorithm may be more capable of performing computations for certain forms of nonlinear equations. 
 
@@ -17,16 +17,16 @@ A more complete description of the static OPF can be found [here](https://citese
 
 ## Multi-period OPF
 The multi-period OPF (MPOPF) is a simple variant of the static OPF, but it can introduce powerful results. The MPOPF expands variables across time periods, requiring the same balance as in the static OPF to be balanced for each time period. This allows for the evaluation of real-world problems that involve fluctuating demand over time. The MPOPF also introduces an additional constraint to restrict how quickly generators can ramp up or down. 
-$$$
+```math
 -\Delta P \leq P_{g,t} - P_{g,t-1} \leq \Delta P
-$$$
+```
 
 ## MPOPF with storage
-The MPOPF also enables the introduction of storage devices to the model. We model storage devices as discussed in __[Geth, Coffrin, Fobes 2020](https://arxiv.org/pdf/2004.14768)__ [2]. Transfer of power to and from storage devices along with associated losses are now included in the overall power balance for each bus. 
+The MPOPF also enables the introduction of storage devices to the model. We model storage devices as discussed in __[Geth, Coffrin, Fobes 2020](https://arxiv.org/pdf/2004.14768)__ [geth2020flexiblestoragemodelpower](@cite). Transfer of power to and from storage devices along with associated losses are now included in the overall power balance for each bus. 
 
 One challenge of implementing storage is the complementarity constraint that prevents storage devices from charging and discharging simultaneously. In order to not introduce integer variables, the constraint is implemented as so:
-$$$
+```math
 P_{d} \cdot P_{c} = 0
-$$$
+```
 
 This formulation can lead to errors arising from numerical imprecision. As a result, ExaModelsPower.jl provides several options to avoid the explicit implementation of this complementarity constraint. 

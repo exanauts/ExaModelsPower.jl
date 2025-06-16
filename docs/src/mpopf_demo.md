@@ -101,7 +101,7 @@ result.objective
 ````
 
 ````
-299068.0404892947
+299068.0404892949
 ````
 
 ExaModelsPower also provides a secondary option to avoid dealing with complementarity constraints. The user can specify a function that computesloss in battery level as a smooth function of discharge rate and the storage devices thermal rating parameter. We provide an arbitrary example function to demonstrate the modeling capability.
@@ -128,7 +128,7 @@ result.objective
 ````
 
 ````
-299044.324045392
+299044.32404539204
 ````
 
 Despite the example discharge function being generated somewhat arbitrarily, the resultant objective values remain quite close for both the smooth and piecewise charge/discharge functions.
