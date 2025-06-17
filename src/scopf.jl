@@ -180,8 +180,6 @@ function scopf_model(
     q_nt_qru_plus = variable(core, Nq, L_T; lvar = zeros(Nq, L_T))
     q_nt_qrd_plus = variable(core, Nq, L_T; lvar = zeros(Nq, L_T))
 
-    p_t_sl = variable(core, L_T;)
-
     q_it = variable(core, I, L_T;)
     q_it_plus = variable(core, I, L_T;)
 
@@ -194,7 +192,6 @@ function scopf_model(
     
     v_it = variable(core, I, L_T; lvar = v_lvar, uvar = v_uvar) 
 
-    #skipping, for now, z_base, z_ctgavg, z_ctgmin, z_t_ctgavg, z_t_ctgmin, z_tk_ctg, z_t_t
     z_w_en_max_pr = variable(core, L_W_en_max_pr;)
     z_w_en_max_cs = variable(core, L_W_en_max_cs;)
     z_w_en_min_pr = variable(core, L_W_en_min_pr;)
@@ -280,10 +277,18 @@ function scopf_model(
     o6_t_i = objective(core, -(-(z_it_p[b.i, b.t] + z_it_q[b.i, b.t])) for b in sc_data.busarray)
     o6_t_Np = objective(core, -(-(z_nt_rgu[n.n_p, n.t] + z_nt_rgd[n.n_p, n.t] + z_nt_scr[n.n_p, n.t] + z_nt_nsc[n.n_p, n.t] + z_nt_rru[n.n_p, n.t] + z_nt_rrd[n.n_p, n.t])) for n in sc_data.preservearray)
     o6_t_Nq = objective(core, -(-(z_nt_qru[n.n_q, n.t] + z_nt_qrd[n.n_q, n.t])) for n in sc_data.qreservearray)
-    o6_en_max_pr = objective(core, z_w_en_max_pr[w] for w in 1:L_W_en_max_pr)
-    o6_en_max_cs = objective(core, z_w_en_max_cs[w] for w in 1:L_W_en_max_cs)
-    o6_en_min_pr = objective(core, z_w_en_min_pr[w] for w in 1:L_W_en_min_pr)
-    o6_en_min_cs = objective(core, z_w_en_min_cs[w] for w in 1:L_W_en_min_cs)
+    if L_W_en_max_pr > 0
+        o6_en_max_pr = objective(core, z_w_en_max_pr[w] for w in 1:L_W_en_max_pr)
+    end
+    if L_W_en_max_cs > 0
+        o6_en_max_cs = objective(core, z_w_en_max_cs[w] for w in 1:L_W_en_max_cs)
+    end
+    if L_W_en_min_pr > 0
+        o6_en_min_pr = objective(core, z_w_en_min_pr[w] for w in 1:L_W_en_min_pr)
+    end
+    if L_W_en_min_cs > 0
+        o6_en_min_cs = objective(core, z_w_en_min_cs[w] for w in 1:L_W_en_min_cs)
+    end
 
 
     
@@ -297,6 +302,7 @@ function scopf_model(
         c5 = constraint(core, z_t_ctg_avg[t] for t in sc_data.periods)
     end
 
+    
     c10 = constraint(core, z_tk_ctg[ind.t, ind.k] for ind in sc_data.tk_index)
     c10_ln = constraint!(core, c10, ln.t + L_T*(ln.ctg-1) => z_jtk_s_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened)
     c10_xf = constraint!(core, c10, xf.t + L_T*(xf.ctg-1) => z_jtk_s_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened)
@@ -315,6 +321,7 @@ function scopf_model(
     c17_pr = constraint!(core, c17, pr.bus + I*(pr.t-1) => p_jt_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
     c17_cs = constraint!(core, c17, cs.bus + I*(cs.t-1) => -p_jt_cs[cs.j_cs, cs.t] for cs in sc_data.csarray)
     c17_sh = constraint!(core, c17, sh.bus + I*(sh.t-1) => -p_jt_sh[sh.j_sh, sh.t] for sh in sc_data.shuntarray)
+    
     #Reminder: fr and to split for ln, xf, and dc
     c17_fr_ln = constraint!(core, c17, ln.fr_bus + I*(ln.t-1) => -p_jt_fr_ln[ln.j_ln, ln.t] for ln in sc_data.aclbrancharray)
     c17_fr_xf = constraint!(core, c17, xf.fr_bus + I*(xf.t-1) => -p_jt_fr_xf[xf.j_xf, xf.t] for xf in sc_data.acxbrancharray)
@@ -334,6 +341,7 @@ function scopf_model(
     c18_to_xf = constraint!(core, c18, xf.to_bus + I*(xf.t-1) => -q_jt_to_xf[xf.j_xf, xf.t] for xf in sc_data.acxbrancharray)
     c18_to_dc = constraint!(core, c18, dc.to_bus + I*(dc.t-1) => -q_jt_to_dc[dc.j_dc, dc.t] for dc in sc_data.dclinearray)
 
+    
     #4.3.2 Reserve shortfall penalties
     c28 = constraint(core, z_nt_rgu[n.n_p, n.t] - n.dt*n.c_rgu*p_nt_rgu_plus[n.n_p, n.t] for n in sc_data.preservearray)
     c29 = constraint(core, z_nt_rgd[n.n_p, n.t] - n.dt*n.c_rgd*p_nt_rgd_plus[n.n_p, n.t] for n in sc_data.preservearray)
@@ -344,6 +352,7 @@ function scopf_model(
     c34 = constraint(core, z_nt_qru[n.n_q, n.t] - n.dt*n.c_qru*q_nt_qru_plus[n.n_q, n.t] for n in sc_data.qreservearray)
     c35 = constraint(core, z_nt_qrd[n.n_q, n.t] - n.dt*n.c_qrd*q_nt_qrd_plus[n.n_q, n.t] for n in sc_data.qreservearray)
 
+    
     #4.3.3 Reserve requirements
     c36 = constraint(core, p_nt_rgu_req[n.n_p, n.t]/n.σ_rgu for n in sc_data.preservearray)
     c36_cs = constraint!(core, c36, cs.n + Np*(cs.t-1) => -p_jt_cs[cs.j_cs, cs.t] for cs in sc_data.preservesetarray_cs)
@@ -563,7 +572,6 @@ function scopf_model(
     c158_xf = constraint(core, xf.dt*c_s*s_jtk_plus_xf[xf.flat_jtk_xf] - z_jtk_s_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened)
 
     #4.9.2 Post-contingency AC power flow limits
-    #=
     c159_ln = constraint(core, (p_jtk_ln[ln.flat_jtk_ln]^2 + q_jt_fr_ln[ln.j_ln, ln.t]^2)^0.5 - ln.s_max_ctg - s_jtk_plus_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened;
     lcon = fill(-Inf, size(sc_data.jtk_ln_flattened)))
     c159_xf = constraint(core, (p_jtk_xf[xf.flat_jtk_xf]^2 + q_jt_fr_xf[xf.j_xf, xf.t]^2)^0.5 - xf.s_max_ctg - s_jtk_plus_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened;
@@ -571,7 +579,7 @@ function scopf_model(
     c160_ln = constraint(core, (p_jtk_ln[ln.flat_jtk_ln]^2 + q_jt_to_ln[ln.j_ln, ln.t]^2)^0.5 - ln.s_max_ctg - s_jtk_plus_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened;
     lcon = fill(-Inf, size(sc_data.jtk_ln_flattened)))
     c160_xf = constraint(core, (p_jtk_xf[xf.flat_jtk_xf]^2 + q_jt_to_xf[xf.j_xf, xf.t]^2)^0.5 - xf.s_max_ctg - s_jtk_plus_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened;
-    lcon = fill(-Inf, size(sc_data.jtk_xf_flattened)))=#
+    lcon = fill(-Inf, size(sc_data.jtk_xf_flattened)))
 
     #4.9.3 Post-contingency AC branch real power flows
     c161_ln = constraint(core, p_jtk_ln[ln.flat_jtk_ln] + ln.b_sr*ln.u_on*(θ_itk[ln.fr_bus, ln.t, ln.ctg] - θ_itk[ln.to_bus, ln.t, ln.ctg] - φ_jt_ln[ln.j_ln, ln.t]) for ln in sc_data.jtk_ln_flattened)
@@ -593,65 +601,149 @@ function scopf_model(
     c163_sh = constraint!(core, c163, sh.bus + I*(sh.t-1) + I*L_T*(sh.k-1) => -p_jt_sh[sh.j_sh, sh.t] for sh in sc_data.k_shuntarray)
     c163_dc_fr = constraint!(core, c163, dc.fr_bus + I*(dc.t-1) + I*L_T*(dc.ctg-1) => -p_jt_fr_dc[dc.j_dc, dc.t] for dc in sc_data.jtk_dc_flattened)
     c163_dc_to = constraint!(core, c163, dc.to_bus + I*(dc.t-1) + I*L_T*(dc.ctg-1) => -p_jt_fr_dc[dc.j_dc, dc.t] for dc in sc_data.jtk_dc_flattened)
-
+    
 
 
     model = ExaModel(core; kwargs...)
 
-    obj_vars = (
-        z_w_en_max_pr = z_w_en_max_pr,
-        z_w_en_max_cs = z_w_en_max_cs,
-        z_w_en_min_pr = z_w_en_min_pr,
-        z_w_en_min_cs = z_w_en_min_cs,
-        
-        #split z_jt_en and on into pr and cs
-        z_jt_en_pr = z_jt_en_pr,
-        z_jt_en_cs = z_jt_en_cs,
-
-        z_it_p = z_it_p,
-        z_it_q = z_it_q,
-
-        #z_jt_s split into ln and xf
-        z_jt_s_ln = z_jt_s_ln,
-        z_jt_s_xf = z_jt_s_xf ,
-        #z_jt rgu, rgd, scr, nsc, rru, rrd, qru, qrd split into pr and cs
-        z_jt_rgu_pr = z_jt_rgu_pr, 
-        z_jt_rgu_cs = z_jt_rgu_cs,
-        z_jt_rgd_pr = z_jt_rgd_pr,
-        z_jt_rgd_cs = z_jt_rgd_cs,
-        z_jt_scr_pr = z_jt_scr_pr,
-        z_jt_scr_cs = z_jt_scr_cs,
-        z_jt_nsc_pr = z_jt_nsc_pr,
-        z_jt_nsc_cs = z_jt_nsc_cs,
-        z_jt_rru_pr = z_jt_rru_pr,
-        z_jt_rru_cs = z_jt_rru_cs,
-        z_jt_rrd_pr = z_jt_rrd_pr,
-        z_jt_rrd_cs = z_jt_rrd_cs,
-        z_jt_qru_pr = z_jt_qru_pr,
-        z_jt_qru_cs = z_jt_qru_cs,
-        z_jt_qrd_pr = z_jt_qrd_pr,
-        z_jt_qrd_cs = z_jt_qrd_cs,
-
-        z_nt_rgu = z_nt_rgu,
-        z_nt_rgd = z_nt_rgd,
-        z_nt_scr = z_nt_scr ,
-        z_nt_nsc = z_nt_nsc,
-        z_nt_rru = z_nt_rru ,
-        z_nt_rrd = z_nt_rrd,
-        z_nt_qru = z_nt_qru,
-        z_nt_qrd = z_nt_qrd,
-        z_jtk_s_ln = z_jtk_s_ln,
-        z_jtk_s_xf = z_jtk_s_xf,
-        z_tk_ctg = z_tk_ctg,
-        z_t_ctg_min = z_t_ctg_min,
-        z_t_ctg_avg = z_t_ctg_avg,
-        )
+    vars = (b_jt_sh = b_jt_sh,
+            g_jt_sh = g_jt_sh,
+            #Split e_w_plus into separate sets for W_en_min and W_en_max ad for pr, cs
+            e_w_plus_min_pr = e_w_plus_min_pr,
+            e_w_plus_min_cs = e_w_plus_min_cs,
+            e_w_plus_max_pr = e_w_plus_max_pr,
+            e_w_plus_max_cs = e_w_plus_max_cs,
+            p_it = p_it,
+            p_it_plus = p_it_plus,
+            #splitting p_jt and q_jt for shunts, producers, and consumers
+            p_jt_sh = p_jt_sh,
+            p_jt_pr = p_jt_pr,
+            p_jt_cs = p_jt_cs,
+            q_jt_sh = q_jt_sh,
+            q_jt_pr = q_jt_pr,
+            q_jt_cs = q_jt_cs,
+            #Splitting p on, sd , su into pr and cs
+            p_jt_on_pr = p_jt_on_pr,
+            p_jt_on_cs = p_jt_on_cs,
+            p_jt_su_pr = p_jt_su_pr,
+            p_jt_su_cs = p_jt_su_cs,
+            p_jt_sd_pr = p_jt_sd_pr,
+            p_jt_sd_cs = p_jt_sd_cs,
+            #p_jtm has been flattened and uses only one special index, k_flat
+            p_jtm_pr = p_jtm_pr,
+            p_jtm_cs = p_jtm_cs,
+            #to/from power split into ln, xf, and dc lines
+            p_jt_fr_ln = p_jt_fr_ln,
+            p_jt_fr_xf = p_jt_fr_xf,
+            p_jt_fr_dc = p_jt_fr_dc,
+            p_jt_to_ln = p_jt_to_ln,
+            p_jt_to_xf = p_jt_to_xf,
+            p_jt_to_dc = p_jt_to_dc,
+            q_jt_fr_ln = q_jt_fr_ln,
+            q_jt_fr_xf = q_jt_fr_xf,
+            q_jt_fr_dc = q_jt_fr_dc,
+            q_jt_to_ln = q_jt_to_ln,
+            q_jt_to_xf = q_jt_to_xf,
+            q_jt_to_dc = q_jt_to_dc,
+            #p_jt rgu, rgd, scr, rru,on, rru,off, rrd,on, rrd,off and q_jt qru/qrd split into pr and cs
+            p_jt_rgu_pr = p_jt_rgu_pr,
+            p_jt_rgu_cs = p_jt_rgu_cs,
+            p_jt_rgd_pr = p_jt_rgd_pr,
+            p_jt_rgd_cs = p_jt_rgd_cs,
+            p_jt_scr_pr = p_jt_scr_pr,
+            p_jt_scr_cs = p_jt_scr_cs,
+            p_jt_nsc_pr = p_jt_nsc_pr,
+            p_jt_nsc_cs = p_jt_nsc_cs,
+            p_jt_rru_on_pr = p_jt_rru_on_pr,
+            p_jt_rru_on_cs = p_jt_rru_on_cs,
+            p_jt_rru_off_pr = p_jt_rru_off_pr,
+            p_jt_rru_off_cs = p_jt_rru_off_cs,
+            p_jt_rrd_on_pr = p_jt_rrd_on_pr,
+            p_jt_rrd_on_cs = p_jt_rrd_on_cs,
+            p_jt_rrd_off_pr = p_jt_rrd_off_pr,
+            p_jt_rrd_off_cs = p_jt_rrd_off_cs,
+            q_jt_qru_pr = q_jt_qru_pr,
+            q_jt_qru_cs = q_jt_qru_cs,
+            q_jt_qrd_pr = q_jt_qrd_pr,
+            q_jt_qrd_cs = q_jt_qrd_cs,
+            p_nt_rgu_req = p_nt_rgu_req,
+            p_nt_rgd_req = p_nt_rgd_req,
+            p_nt_scr_req = p_nt_scr_req,
+            p_nt_nsc_req = p_nt_nsc_req,
+            p_jt_pr_max = p_jt_pr_max,
+            p_nt_rgu_plus = p_nt_rgu_plus,
+            p_nt_rgd_plus = p_nt_rgd_plus,
+            p_nt_scr_plus = p_nt_scr_plus,
+            p_nt_nsc_plus = p_nt_nsc_plus,
+            p_nt_rru_plus = p_nt_rru_plus,
+            p_nt_rrd_plus = p_nt_rrd_plus,
+            q_nt_qru_plus = q_nt_qru_plus,
+            q_nt_qrd_plus = q_nt_qrd_plus,
+            p_t_sl = p_t_sl,
+            q_it = q_it,
+            q_it_plus = q_it_plus,
+            #s_jt_plus split on ln and xf
+            s_jt_plus_ln = s_jt_plus_ln,
+            s_jt_plus_xf = s_jt_plus_xf,
+            v_it = v_it,
+            z_w_en_max_pr = z_w_en_max_pr,
+            z_w_en_max_cs = z_w_en_max_cs,
+            z_w_en_min_pr = z_w_en_min_pr,
+            z_w_en_min_cs = z_w_en_min_cs,
+            #split z_jt_en and on into pr and cs
+            z_jt_en_pr = z_jt_en_pr,
+            z_jt_en_cs = z_jt_en_cs,
+            z_it_p = z_it_p,
+            z_it_q = z_it_q,
+            #z_jt_s split into ln and xf
+            z_jt_s_ln = z_jt_s_ln,
+            z_jt_s_xf = z_jt_s_xf,
+            #z_jt rgu, rgd, scr, nsc, rru, rrd, qru, qrd split into pr and cs
+            z_jt_rgu_pr = z_jt_rgu_pr,
+            z_jt_rgu_cs = z_jt_rgu_cs,
+            z_jt_rgd_pr = z_jt_rgd_pr,
+            z_jt_rgd_cs = z_jt_rgd_cs,
+            z_jt_scr_pr = z_jt_scr_pr,
+            z_jt_scr_cs = z_jt_scr_cs,
+            z_jt_nsc_pr = z_jt_nsc_pr,
+            z_jt_nsc_cs = z_jt_nsc_cs,
+            z_jt_rru_pr = z_jt_rru_pr,
+            z_jt_rru_cs = z_jt_rru_cs,
+            z_jt_rrd_pr = z_jt_rrd_pr,
+            z_jt_rrd_cs = z_jt_rrd_cs,
+            z_jt_qru_pr = z_jt_qru_pr,
+            z_jt_qru_cs = z_jt_qru_cs,
+            z_jt_qrd_pr = z_jt_qrd_pr,
+            z_jt_qrd_cs = z_jt_qrd_cs,
+            z_nt_rgu = z_nt_rgu,
+            z_nt_rgd = z_nt_rgd,
+            z_nt_scr = z_nt_scr,
+            z_nt_nsc = z_nt_nsc,
+            z_nt_rru = z_nt_rru,
+            z_nt_rrd = z_nt_rru,
+            z_nt_qru = z_nt_qru,
+            z_nt_qrd = z_nt_qrd,
+            θ_it = θ_it,
+            #split τjt and φjt into ln and xf
+            τ_jt_ln = τ_jt_ln,
+            τ_jt_xf = τ_jt_xf,
+            φ_jt_ln = φ_jt_ln,
+            φ_jt_xf = φ_jt_xf,
+            s_jtk_plus_ln = s_jtk_plus_ln,
+            s_jtk_plus_xf = s_jtk_plus_xf,
+            z_jtk_s_ln = z_jtk_s_ln,
+            z_jtk_s_xf = z_jtk_s_xf,
+            p_jtk_ln = p_jtk_ln,
+            p_jtk_xf = p_jtk_xf,
+            θ_itk = θ_itk,
+            z_tk_ctg = z_tk_ctg,
+            z_t_ctg_min = z_t_ctg_min,
+            z_t_ctg_avg = z_t_ctg_avg)
 
     unincluded_obj = -(z_jt_on_pr + z_jt_on_cs + z_jt_su_pr + z_jt_su_cs + z_jt_su_ln + z_jt_su_xf
                     + z_jt_sd_pr + z_jt_sd_cs + z_jt_sd_ln + z_jt_sd_xf + z_jt_sus_pr + z_jt_sus_cs)
 
-
-    return model, sc_data, obj_vars, unincluded_obj
+    return model, sc_data, vars, unincluded_obj, lengths
 
 end
 

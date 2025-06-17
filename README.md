@@ -7,7 +7,7 @@ ExaModelsPower.jl is an optimal power flow models using ExaModels.jl
 ## Usage
 ### Static optimal power flow
 ```julia
-using ExaModelsPower, MadNLP, MadNLPGPU, CUDA
+using ExaModelsPower, MadNLP, MadNLPGPU, CUDA, ExaModels
 
 model, vars, cons = opf_model(
     "pglib_opf_case118_ieee.m";

@@ -1037,3 +1037,66 @@ function parse_sc_data(data, uc_data, data_json)
 
     return sc_time_data, lengths
 end
+
+function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
+    uc_data = JSON.parsefile(uc_filename)
+    (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
+    L_J_pr, L_J_cspr, L_J_sh) = lengths
+    #Update simple dispatchable devices
+    for line in uc_data["time_series_output"]["simple_dispatchable_device"]
+        solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to j_prcs
+        if solution_index > L_J_pr
+            solution_index -= L_J_pr
+            line["p_syn_res"] = Array(solution(result, vars.p_jt_scr_cs))[solution_index,:]
+            line["p_ramp_res_up_online"] = Array(solution(result, vars.p_jt_rru_on_cs))[solution_index,:]
+            line["p_nsyn_res"] = Array(solution(result, vars.p_jt_nsc_cs))[solution_index,:]
+            line["p_reg_res_up"] = Array(solution(result, vars.p_jt_rgu_cs))[solution_index,:]
+            line["p_ramp_res_down_online"] = Array(solution(result, vars.p_jt_rrd_on_cs))[solution_index,:]
+            line["p_on"] = Array(solution(result, vars.p_jt_on_cs))[solution_index,:]
+            line["q"] = Array(solution(result, vars.q_jt_cs))[solution_index,:]
+            line["p_reg_res_down"] = Array(solution(result, vars.p_jt_rgd_cs))[solution_index,:]
+            line["p_ramp_res_up_offline"] = Array(solution(result, vars.p_jt_rru_on_cs))[solution_index,:]
+            line["q_res_down"] = Array(solution(result, vars.q_jt_qrd_cs))[solution_index,:]
+            line["q_res_up"] = Array(solution(result, vars.q_jt_qru_cs))[solution_index,:]
+            line["p_ramp_res_down_offline"] = Array(solution(result, vars.p_jt_rrd_off_cs))[solution_index,:]
+        else
+            line["p_syn_res"] = Array(solution(result, vars.p_jt_scr_pr))[solution_index,:]
+            line["p_ramp_res_up_online"] = Array(solution(result, vars.p_jt_rru_on_pr))[solution_index,:]
+            line["p_nsyn_res"] = Array(solution(result, vars.p_jt_nsc_pr))[solution_index,:]
+            line["p_reg_res_up"] = Array(solution(result, vars.p_jt_rgu_pr))[solution_index,:]
+            line["p_ramp_res_down_online"] = Array(solution(result, vars.p_jt_rrd_on_pr))[solution_index,:]
+            line["p_on"] = Array(solution(result, vars.p_jt_on_pr))[solution_index,:]
+            line["q"] = Array(solution(result, vars.q_jt_pr))[solution_index,:]
+            line["p_reg_res_down"] = Array(solution(result, vars.p_jt_rgd_pr))[solution_index,:]
+            line["p_ramp_res_up_offline"] = Array(solution(result, vars.p_jt_rru_on_pr))[solution_index,:]
+            line["q_res_down"] = Array(solution(result, vars.q_jt_qrd_pr))[solution_index,:]
+            line["q_res_up"] = Array(solution(result, vars.q_jt_qru_pr))[solution_index,:]
+            line["p_ramp_res_down_offline"] = Array(solution(result, vars.p_jt_rrd_off_pr))[solution_index,:]
+        end
+    end
+    #Update two winding transformers
+    for line in uc_data["time_series_output"]["two_winding_transformer"]
+        solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to j_xf
+        line["tm"] = Array(solution(result, vars.τ_jt_xf))[solution_index,:]
+        line["ta"] = Array(solution(result, vars.φ_jt_xf))[solution_index,:]
+    end
+
+    #Update DC lines
+    for line in uc_data["time_series_output"]["dc_line"]
+        solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to j_dc
+        line["qdc_fr"] = Array(solution(result, vars.q_jt_fr_dc))[solution_index,:]
+        line["pdc_fr"] = Array(solution(result, vars.p_jt_fr_dc))[solution_index,:]
+        line["qdc_to"] = Array(solution(result, vars.q_jt_to_dc))[solution_index,:]
+    end
+
+    #Update buses
+    for line in uc_data["time_series_output"]["bus"]
+        solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to i
+        line["vm"] = Array(solution(result, vars.v_it))[solution_index,:]
+        line["va"] = Array(solution(result, vars.θ_it))[solution_index,:]
+    end
+
+    open(solution_name, "w") do io
+        JSON.print(io, uc_data, 4)
+    end
+end
