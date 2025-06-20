@@ -8,7 +8,7 @@ function parse_ac_power_data(filename)
     if isfile(joinpath(TMPDIR, name) * ".jld2")
         @info "Loading cached JLD2 file"
         loaded = JLD2.load(joinpath(TMPDIR, name) * ".jld2")
-        return loaded["data"], loaded["dicts"] 
+        return loaded["data"], loaded["dicts"]
     else
         ff = if isfile(filename)
             filename
@@ -107,7 +107,7 @@ function process_ac_power_data(filename)
                 ],
         storage = isempty(ref[:storage]) ?  empty_data = Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [
             begin
-                (c = i, 
+                (c = i,
                 Einit = stor["energy"],
                 etac = stor["charge_efficiency"],
                 etad = stor["discharge_efficiency"],
@@ -129,6 +129,10 @@ function process_ac_power_data(filename)
         rate_a = [ref[:branch][l]["rate_a"] for (k, (l, i, j)) in enumerate(ref[:arcs])],
         angmax = [b["angmax"] for (i, b) in ref[:branch]],
         angmin = [b["angmin"] for (i, b) in ref[:branch]],
+        vm0 = [v["vm"] for (k, v) in ref[:bus]],
+        va0 = [v["va"] for (k, v) in ref[:bus]],
+        pg0 = [v["pg"] for (k, v) in ref[:gen]],
+        qg0 = [v["qg"] for (k, v) in ref[:gen]],
         pdmax = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["charge_rating"] for (i, s) in ref[:storage]],
         pcmax = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["discharge_rating"] for (i, s) in ref[:storage]],
         srating = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["thermal_rating"] for (i, s) in ref[:storage]],
@@ -139,7 +143,7 @@ function process_ac_power_data(filename)
     d, f = splitdir(filename)
     name,ext = splitext(f)
     JLD2.save(joinpath(TMPDIR, name * ".jld2"), "data", data, "dicts", dicts)
-    
+
     return data, dicts
 end
 
