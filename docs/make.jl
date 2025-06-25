@@ -53,8 +53,5 @@ makedocs(;
 )
 
 deploydocs(
-    repo = "github.com/exanauts/ExaModelsPower.jl.git",
-    branch = "gh-pages",
-    devbranch = "documentation",  # your default branch
-    target = "previews/$(get(ENV, "GITHUB_REF_NAME", "manual"))"
+    repo = "github.com/exanauts/ExaModelsPower.jl.git"
 )
