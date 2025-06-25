@@ -52,5 +52,7 @@ makedocs(;
     clean = false
 )
 
-deploydocs(repo = "github.com/exanauts/ExaModelsPower.jl.git"; push_preview = true)
-
+deploydocs(
+    repo = "github.com/exanauts/ExaModelsPower.jl.git",
+    target = "previews/manual-preview"
+)
