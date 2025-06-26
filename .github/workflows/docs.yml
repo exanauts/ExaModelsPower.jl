@@ -10,6 +10,11 @@ on:
 
 jobs:
   build:
+    permissions:
+        actions: write
+        contents: write
+        pull-requests: read
+        statuses: write
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v2

@@ -52,6 +52,4 @@ makedocs(;
     clean = false
 )
 
-deploydocs(
-    repo = "github.com/exanauts/ExaModelsPower.jl.git"
-)
+deploydocs(; repo = "github.com/exanauts/ExaModelsPower.jl.git")
