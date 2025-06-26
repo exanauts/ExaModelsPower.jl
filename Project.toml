@@ -13,7 +13,7 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 [compat]
 ExaModels = "~0.8"
 PowerModels = "~0.21"
-JLD2 = "~0.4"
+JLD2 = "~0.5"
 CUDA = "~5"
 MadNLP = "~0.8"
 MadNLPGPU = "~0.7"
