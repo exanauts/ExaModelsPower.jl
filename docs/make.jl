@@ -5,7 +5,7 @@ using Documenter, ExaModelsPower, DocumenterCitations, Literate
 
 if !(@isdefined _PAGES)
     const _PAGES = [
-        "Introduction" => "Introduction.md",
+        "Introduction" => "index.md",
         "Tutorial" => [
             "opf_demo.md",
             "mpopf_demo.md"
