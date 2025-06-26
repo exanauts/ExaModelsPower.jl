@@ -52,8 +52,4 @@ makedocs(;
     clean = false
 )
 
-deploydocs(;
-    repo = "github.com/exanauts/ExaModelsPower.jl.git",
-    branch = "gh-pages",
-    devbranch = "documentation"
-)
+deploydocs(repo = "github.com/exanauts/ExaModelsPower.jl.git"; push_preview = true)

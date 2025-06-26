@@ -4,29 +4,20 @@ on:
   push:
     branches:
       - main # update to match your development branch (master, main, dev, trunk, ...)
-      - documentation
     tags: '*'
   pull_request:
 
 jobs:
   build:
-    permissions:
-        actions: write
-        contents: write
-        pull-requests: read
-        statuses: write
-    runs-on: self-hosted
+    runs-on:
+      labels: cuda
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@latest
         with:
-          version: '1.9'
+          version: '1'
       - name: Install dependencies
-        run: |
-            julia --project=docs/ -e 'using Pkg; Pkg.Registry.update(); Pkg.develop(PackageSpec(path=pwd())); Pkg.add(["Documenter", "DocumenterCitations", "Literate", "CUDA", "MadNLP", "MadNLPGPU", "ExaModels", "Downloads"]); Pkg.instantiate()'
-            julia --project=docs/ -e 'using Pkg; println("Installed packages: ", Pkg.installed())'
-      - name: Verify environment
-        run: julia --project=docs/ -e 'using Pkg; println("Environment setup successful!")'
+        run: julia --project=docs/ -e 'using Pkg; Pkg.Registry.update(); Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
       - name: Build and deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token
