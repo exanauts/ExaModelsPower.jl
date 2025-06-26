@@ -3,6 +3,7 @@ ExaModelsPower.jl is an optimal power flow models using ExaModels.jl
 
 ![CI](https://github.com/exanauts/ExaModelsPower.jl/actions/workflows/ci.yml/badge.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![doc](https://img.shields.io/badge/docs-stable-blue.svg)](https://exanauts.github.io/ExaModelsPower.jl/stable) 
 
 ## Usage
 ### Static optimal power flow
