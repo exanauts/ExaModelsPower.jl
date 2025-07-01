@@ -7,7 +7,6 @@ MyJulia1("data/C3E4N00073D1_scenario_303.json", 600, 1, "C3E4N00073", 1)=#
 
 
 
-
 using GOC3Benchmark, JSON
 
 #this solution found using the ARPA-E benchmark code
@@ -26,9 +25,11 @@ function parse_sc_data_static(data)
     L_J_sh = length(data.shunt_lookup)
     L_N_p = length(data.azr_lookup)
     L_N_q = length(data.rzr_lookup)
+    I  = length(data.bus_lookup)
+    L_T = length(data.dt)
 
     lengths = (L_J_xf=L_J_xf, L_J_ln=L_J_ln, L_J_ac=L_J_ac, L_J_dc=L_J_dc, L_J_br=L_J_br, L_J_cs=L_J_cs,
-    L_J_pr=L_J_pr, L_J_cspr = L_J_cspr, L_J_sh=L_J_sh)
+    L_J_pr=L_J_pr, L_J_cspr = L_J_cspr, L_J_sh=L_J_sh, I=I, L_T=L_T, L_N_p, L_N_q)
 
     ε_time = 1e-6
 
@@ -209,8 +210,8 @@ function parse_sc_data_static(data)
                 qdc_to_min = val["qdc_to_lb"]
                 qdc_fr_max = val["qdc_fr_ub"]
                 qdc_to_max = val["qdc_to_ub"]
-                to_bus = parse(Int, match(r"\d+", val["to_bus"]).match)
-                fr_bus = parse(Int, match(r"\d+", val["fr_bus"]).match)
+                to_bus = parse(Int, match(r"\d+", val["to_bus"]).match)+1
+                fr_bus = parse(Int, match(r"\d+", val["fr_bus"]).match)+1
                 (j=j, j_dc = j_dc, uid=uid, pdc_max=pdc_max, qdc_fr_min=qdc_fr_min, qdc_to_min=qdc_to_min, qdc_fr_max=qdc_fr_max, qdc_to_max=qdc_to_max, to_bus=to_bus, fr_bus=fr_bus)
             end for val in values(data.dc_line_lookup)
 
@@ -493,7 +494,7 @@ function parse_sc_data(data, uc_data, data_json)
     sc_data, lengths, cost_vector_pr, cost_vector_cs = parse_sc_data_static(data)
     
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
-    L_J_pr, L_J_cspr, L_J_sh) = lengths
+    L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q) = lengths
     periods = data.periods
     add_status_flags(uc_data["time_series_output"]["ac_line"], data.ac_line_lookup)
     add_status_flags(uc_data["time_series_output"]["two_winding_transformer"], data.twt_lookup)
@@ -679,7 +680,8 @@ function parse_sc_data(data, uc_data, data_json)
     for val in values(data.sdd_lookup)
         if parse(Int, match(r"\d+", val["uid"]).match) < L_J_pr
             for w in val["energy_req_lb"]
-                push!(W_en_min_pr, (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+                push!(W_en_min_pr, (w_en_min_pr_ind = w_en_min_pr_ind,
+                j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
                 j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
                 j_pr = parse(Int, match(r"\d+", val["uid"]).match) + 1,
                 a_en_min_start = w[1],
@@ -695,7 +697,8 @@ function parse_sc_data(data, uc_data, data_json)
     for val in values(data.sdd_lookup)
         if parse(Int, match(r"\d+", val["uid"]).match) >= L_J_pr
             for w in val["energy_req_lb"]
-                push!(W_en_min_cs, (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
+                push!(W_en_min_cs, (w_en_min_cs_ind = w_en_min_cs_ind,
+                j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
                 j_prcs = parse(Int, match(r"\d+", val["uid"]).match) + 1,
                 j_cs = parse(Int, match(r"\d+", val["uid"]).match) + 1 - L_J_pr,
                 a_en_min_start = w[1],
@@ -876,7 +879,11 @@ function parse_sc_data(data, uc_data, data_json)
 
     sc_time_data = (
         ;
-        sc_data...,
+        T_sus_jf = sc_data.T_sus_jf,
+        W_su_max = sc_data.W_su_max,
+        T_w_su_max = sc_data.T_w_su_max,
+        M = sc_data.M,
+        dt = sc_data.dt,
         periods = periods,
 
         tk_index = [(t=t, k=k) for t in periods, k in 1:length(data_json["reliability"]["contingency"])],
@@ -898,12 +905,12 @@ function parse_sc_data(data, uc_data, data_json)
         qreservearray = [(;n=q.n, n_q=q.n_q, uid=q.uid, c_qru=q.c_qru, c_qrd=q.c_qrd, q_qru_min=q.q_qru_min[t], q_qrd_min=q.q_qrd_min[t], t=t, dt = sc_data.dt[t])
         for q in sc_data.reactive_reserve, t in periods],
 
-        k_prarray = [(;b..., t=t, k=k) for b in sc_data.prod, t in periods, k in 1:length(data_json["reliability"]["contingency"])],
+        k_prarray = [(;j_prcs=b.j_prcs, j_pr=b.j_pr, bus = b.bus, uid=b.uid, t=t, k=k) for b in sc_data.prod, t in periods, k in 1:length(data_json["reliability"]["contingency"])],
         prarray = [(;j=p.j, j_prcs=p.j_prcs, j_pr=p.j_pr, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, c_su = p.c_su, p_ru=p.p_ru, p_rd=p.p_rd,  
         p_ru_su=p.p_ru_su, p_rd_sd=p.p_rd_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
         c_rru_off=p.c_rru_off[t], c_rrd_on=p.c_rrd_on[t], c_rrd_off=p.c_rrd_off[t], c_qru=p.c_qru[t], c_qrd=p.c_qrd[t], p_rgu_max=p.p_rgu_max,
         p_rgd_max=p.p_rgd_max, p_scr_max=p.p_scr_max, p_nsc_max=p.p_nsc_max, p_rru_on_max=p.p_rru_on_max, p_rru_off_max=p.p_rru_off_max, 
-        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t], sus = p.sus,
+        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t], #sus = p.sus,
         u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
         sum_T_supc_pr_jt = sum_T_supc_pr[p.j_pr, t], sum_T_sdpc_pr_jt = sum_T_sdpc_pr[p.j_pr, t], sum2_T_supc_pr_jt=sum2_T_supc_pr[p.j_pr, t], sum2_T_sdpc_pr_jt=sum2_T_sdpc_pr[p.j_pr, t], dt = sc_data.dt[t])
         for p in sc_data.prod, t in periods
@@ -946,14 +953,14 @@ function parse_sc_data(data, uc_data, data_json)
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
         if p.uid == uc["uid"]],
 
-        k_csarray = [(;b..., t=t, k=k) for b in sc_data.cons, t in periods, k in 1:length(data_json["reliability"]["contingency"])],
+        k_csarray = [(;j_prcs=b.j_prcs, j_cs=b.j_cs, bus = b.bus, uid=b.uid, t=t, k=k) for b in sc_data.cons, t in periods, k in 1:length(data_json["reliability"]["contingency"])],
 
         csarray = [(;j=p.j, j_prcs=p.j_prcs, j_cs=p.j_cs, bus=p.bus, uid=p.uid, c_on=p.c_on, c_sd=p.c_sd, c_su=p.c_su, p_ru=p.p_ru, p_rd=p.p_rd,  
         p_ru_su=p.p_ru_su, p_rd_sd=p.p_rd_sd, c_rgu=p.c_rgu[t], c_rgd=p.c_rgd[t], c_scr=p.c_scr[t], c_nsc=p.c_nsc[t], c_rru_on=p.c_rru_on[t],
         c_rru_off=p.c_rru_off[t], c_rrd_on=p.c_rrd_on[t], c_rrd_off=p.c_rrd_off[t], c_qru=p.c_qru[t], c_qrd=p.c_qrd[t], p_rgu_max=p.p_rgu_max,
         p_rgd_max=p.p_rgd_max, p_scr_max=p.p_scr_max, p_nsc_max=p.p_nsc_max, p_rru_on_max=p.p_rru_on_max, p_rru_off_max=p.p_rru_off_max, 
-        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t],
-        sus=p.sus, u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
+        p_rrd_on_max=p.p_rrd_on_max, p_rrd_off_max=p.p_rrd_off_max, p_0=p.p_0, q_0=p.q_0, p_max=p.p_max[t], p_min=p.p_min[t], q_max=p.q_max[t], q_min=p.q_min[t], #sus=p.sus, 
+        u_on = uc["on_status"][t], u_su = uc["su_status"][t], u_sd = uc["sd_status"][t], t=t,
         sum_T_supc_cs_jt = sum_T_supc_cs[p.j_cs, t], sum_T_sdpc_cs_jt = sum_T_sdpc_cs[p.j_cs, t], sum2_T_supc_cs_jt = sum2_T_supc_cs[p.j_cs, t], sum2_T_sdpc_cs_jt = sum2_T_sdpc_cs[p.j_cs, t], dt = sc_data.dt[t])
         for p in sc_data.cons, t in periods
         for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
@@ -1031,7 +1038,9 @@ function parse_sc_data(data, uc_data, data_json)
         T_sus_jft=T_sus_jft,
         jtk_ln_flattened=jtk_ln_flattened,
         jtk_xf_flattened=jtk_xf_flattened,
-        jtk_dc_flattened=jtk_dc_flattened
+        jtk_dc_flattened=jtk_dc_flattened,
+        v_lvar = repeat([b.v_min for b in sc_data.bus], 1, L_T),
+        v_uvar = repeat([b.v_max for b in sc_data.bus], 1, L_T)
 
     )
 
@@ -1041,7 +1050,7 @@ end
 function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
     uc_data = JSON.parsefile(uc_filename)
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
-    L_J_pr, L_J_cspr, L_J_sh) = lengths
+    L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q) = lengths
     #Update simple dispatchable devices
     for line in uc_data["time_series_output"]["simple_dispatchable_device"]
         solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to j_prcs
@@ -1055,7 +1064,7 @@ function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
             line["p_on"] = Array(solution(result, vars.p_jt_on_cs))[solution_index,:]
             line["q"] = Array(solution(result, vars.q_jt_cs))[solution_index,:]
             line["p_reg_res_down"] = Array(solution(result, vars.p_jt_rgd_cs))[solution_index,:]
-            line["p_ramp_res_up_offline"] = Array(solution(result, vars.p_jt_rru_on_cs))[solution_index,:]
+            line["p_ramp_res_up_offline"] = Array(solution(result, vars.p_jt_rru_off_cs))[solution_index,:]
             line["q_res_down"] = Array(solution(result, vars.q_jt_qrd_cs))[solution_index,:]
             line["q_res_up"] = Array(solution(result, vars.q_jt_qru_cs))[solution_index,:]
             line["p_ramp_res_down_offline"] = Array(solution(result, vars.p_jt_rrd_off_cs))[solution_index,:]
@@ -1068,7 +1077,7 @@ function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
             line["p_on"] = Array(solution(result, vars.p_jt_on_pr))[solution_index,:]
             line["q"] = Array(solution(result, vars.q_jt_pr))[solution_index,:]
             line["p_reg_res_down"] = Array(solution(result, vars.p_jt_rgd_pr))[solution_index,:]
-            line["p_ramp_res_up_offline"] = Array(solution(result, vars.p_jt_rru_on_pr))[solution_index,:]
+            line["p_ramp_res_up_offline"] = Array(solution(result, vars.p_jt_rru_off_pr))[solution_index,:]
             line["q_res_down"] = Array(solution(result, vars.q_jt_qrd_pr))[solution_index,:]
             line["q_res_up"] = Array(solution(result, vars.q_jt_qru_pr))[solution_index,:]
             line["p_ramp_res_down_offline"] = Array(solution(result, vars.p_jt_rrd_off_pr))[solution_index,:]
