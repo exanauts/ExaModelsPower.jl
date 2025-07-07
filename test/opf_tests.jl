@@ -1,5 +1,5 @@
-function test_case3(result, result_pm, result_nlp_pm, dicts, pg, qg, p, q)
-    test_static_case(result, result_pm, result_nlp_pm, dicts, pg, qg)
+function test_case3(result, result_pm, result_nlp_pm, pg, qg, p, q)
+    test_static_case(result, result_pm, result_nlp_pm, pg, qg)
 
     #Branches are encoded differently in solutions, so matches are hard coded
     vars_dict =  Dict("p" => p, "q" => q)
@@ -14,7 +14,7 @@ function test_case3(result, result_pm, result_nlp_pm, dicts, pg, qg, p, q)
     end
 end
 
-function test_static_case(result, result_pm, result_nlp_pm, dicts, pg, qg)
+function test_static_case(result, result_pm, result_nlp_pm, pg, qg)
     @test result.status == result_nlp_pm.status
     @test isapprox(result.objective, result_pm["objective"], rtol = result.options.tol*100)
     for key in keys(dicts.gen)
@@ -23,26 +23,26 @@ function test_static_case(result, result_pm, result_nlp_pm, dicts, pg, qg)
     end
 end
 
-function test_polar_voltage(result, result_pm, dicts, va, vm)
+function test_polar_voltage(result, result_pm, va, vm)
     for key in keys(dicts.bus)
         @test isapprox(Array(solution(result, va))[dicts.bus[key]], result_pm["solution"]["bus"][string(key)]["va"], atol = result.options.tol*100)
         @test isapprox(Array(solution(result, vm))[dicts.bus[key]], result_pm["solution"]["bus"][string(key)]["vm"], rtol = result.options.tol*100)
     end
 end
 
-function test_rect_voltage(result, result_pm, dicts, vr, vim)
+function test_rect_voltage(result, result_pm, vr, vim)
     for key in keys(dicts.bus)
         @test isapprox(Array(solution(result, vr))[dicts.bus[key]], result_pm["solution"]["bus"][string(key)]["vr"], rtol = result.options.tol*100)
         @test isapprox(Array(solution(result, vim))[dicts.bus[key]], result_pm["solution"]["bus"][string(key)]["vi"], atol = result.options.tol*100)
     end
 end
 
-function test_case5(result, result_pm, result_nlp_pm, dicts, pg, qg, p, q)
-    test_static_case(result, result_pm, result_nlp_pm, dicts, pg, qg)
+function test_case5(result, result_pm, result_nlp_pm, pg, qg, p, q)
+    test_static_case(result, result_pm, result_nlp_pm, pg, qg)
 end
 
-function test_case14(result, result_pm, result_nlp_pm, dicts, pg, qg, p, q)
-    test_static_case(result, result_pm, result_nlp_pm, dicts, pg, qg)
+function test_case14(result, result_pm, result_nlp_pm, pg, qg, p, q)
+    test_static_case(result, result_pm, result_nlp_pm, pg, qg)
 end
 
 function test_float32(m, m64, result, backend)

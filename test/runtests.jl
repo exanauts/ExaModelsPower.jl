@@ -54,14 +54,9 @@ end
 
 function runtests()
     @testset "ExaModelsPower test" begin
-
         for (T, backend) in CONFIGS
-
             for (filename, case, test_function) in test_cases
                 #Test static opf
-                data, dicts = ExaModelsPower.parse_ac_power_data(filename)
-                data_pm = PowerModels.parse_file(filename)
-
                 #Polar tests
                 m, v, c = opf_model(filename; T=T, backend = backend)
                 result = madnlp(m; print_level = MadNLP.ERROR)
@@ -70,7 +65,7 @@ function runtests()
                 nlp_solver = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol"=>result.options.tol, "print_level"=>0)
                 result_pm = solve_opf(filename,ACPPowerModel, nlp_solver)
 
-                
+                data_pm = PowerModels.parse_file(filename)
                 m_pm = JuMP.Model()
                 pm = instantiate_model(data_pm, ACPPowerModel, PowerModels.build_opf, jump_model = m_pm)
                 nlp_pm = MathOptNLPModel(m_pm)

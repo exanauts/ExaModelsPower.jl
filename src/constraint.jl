@@ -1,52 +1,52 @@
-function gen_cost(g, pg)
-    return g.cost1 * pg^2 + g.cost2 * pg + g.cost3 
+function gen_cost(g :: GenData, pg)
+    return g.c[1] * pg^2 + g.c[2] * pg + g.c[3]
 end
 
 function c_ref_angle_polar(va)
     return va
 end
 
-function c_to_active_power_flow_polar(b, p_f, vm_f, vm_t, va_f, va_t)
+function c_to_active_power_flow_polar(b :: BranchData, p_f, vm_f, vm_t, va_f, va_t)
     return p_f - b.c5 * vm_f^2 -
     b.c3 * (vm_f * vm_t * cos(va_f - va_t)) -
     b.c4 * (vm_f * vm_t * sin(va_f - va_t))
 end
 
-function c_to_reactive_power_flow_polar(b, q_f, vm_f, vm_t, va_f, va_t)
+function c_to_reactive_power_flow_polar(b :: BranchData, q_f, vm_f, vm_t, va_f, va_t)
     return q_f +
     b.c6 * vm_f^2 +
     b.c4 * (vm_f * vm_t * cos(va_f - va_t)) -
     b.c3 * (vm_f * vm_t * sin(va_f - va_t))
 end
 
-function c_from_active_power_flow_polar(b, p_t, vm_f, vm_t, va_f, va_t)
+function c_from_active_power_flow_polar(b :: BranchData, p_t, vm_f, vm_t, va_f, va_t)
     return p_t - b.c7 * vm_t^2 -
     b.c1 * (vm_t * vm_f * cos(va_t - va_f)) -
     b.c2 * (vm_t * vm_f * sin(va_t - va_f))
 end
 
-function c_from_reactive_power_flow_polar(b, q_t, vm_f, vm_t, va_f, va_t)
+function c_from_reactive_power_flow_polar(b :: BranchData, q_t, vm_f, vm_t, va_f, va_t)
     return q_t +
     b.c8 * vm_t^2 +
     b.c2 * (vm_t * vm_f * cos(va_t - va_f)) -
     b.c1 * (vm_t * vm_f * sin(va_t - va_f))
 end
 
-function c_phase_angle_diff_polar(b, va_f, va_t)
+function c_phase_angle_diff_polar(_, va_f, va_t)
     return va_f - va_t
 end
 
-function c_active_power_balance_demand_polar(b, vm)
+function c_active_power_balance_demand_polar(b :: BusData, vm)
     return b.pd + b.gs * vm^2
 end
 
-function c_reactive_power_balance_demand_polar(b, vm)
+function c_reactive_power_balance_demand_polar(b :: BusData, vm)
     return b.qd - b.bs * vm^2
 end
 
 #no coordinates specified
-function c_thermal_limit(b, p,q)
-    return p^2 + q^2 - b.rate_a_sq
+function c_thermal_limit(b :: BranchData, p, q)
+    return p^2 + q^2 - b.ratea_sq
 end
 
 #only for mp
