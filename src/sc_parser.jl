@@ -1058,13 +1058,13 @@ function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
             solution_index -= L_J_pr
             line["p_syn_res"] = Array(solution(result, vars.p_jt_scr_cs))[solution_index,:]
             line["p_ramp_res_up_online"] = Array(solution(result, vars.p_jt_rru_on_cs))[solution_index,:]
-            line["p_nsyn_res"] = Array(solution(result, vars.p_jt_nsc_cs))[solution_index,:]
+            line["p_nsyn_res"] = zeros(L_T)
             line["p_reg_res_up"] = Array(solution(result, vars.p_jt_rgu_cs))[solution_index,:]
             line["p_ramp_res_down_online"] = Array(solution(result, vars.p_jt_rrd_on_cs))[solution_index,:]
             line["p_on"] = Array(solution(result, vars.p_jt_on_cs))[solution_index,:]
             line["q"] = Array(solution(result, vars.q_jt_cs))[solution_index,:]
             line["p_reg_res_down"] = Array(solution(result, vars.p_jt_rgd_cs))[solution_index,:]
-            line["p_ramp_res_up_offline"] = Array(solution(result, vars.p_jt_rru_off_cs))[solution_index,:]
+            line["p_ramp_res_up_offline"] = zeros(L_T)
             line["q_res_down"] = Array(solution(result, vars.q_jt_qrd_cs))[solution_index,:]
             line["q_res_up"] = Array(solution(result, vars.q_jt_qru_cs))[solution_index,:]
             line["p_ramp_res_down_offline"] = Array(solution(result, vars.p_jt_rrd_off_cs))[solution_index,:]
@@ -1080,7 +1080,7 @@ function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
             line["p_ramp_res_up_offline"] = Array(solution(result, vars.p_jt_rru_off_pr))[solution_index,:]
             line["q_res_down"] = Array(solution(result, vars.q_jt_qrd_pr))[solution_index,:]
             line["q_res_up"] = Array(solution(result, vars.q_jt_qru_pr))[solution_index,:]
-            line["p_ramp_res_down_offline"] = Array(solution(result, vars.p_jt_rrd_off_pr))[solution_index,:]
+            line["p_ramp_res_down_offline"] = zeros(L_T)
         end
     end
     #Update two winding transformers
