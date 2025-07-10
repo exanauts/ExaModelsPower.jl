@@ -16,7 +16,7 @@ function build_polar_opf(data :: Data; backend = nothing, T=Float64, kwargs...)
     p = variable(core, length(data.arc); lvar = -data.ratea, uvar = data.ratea)
     q = variable(core, length(data.arc); lvar = -data.ratea, uvar = data.ratea)
 
-    objective(core, gen_cost(g, pg[i]) for (i, g) in enumerate(data.gen))
+    objective(core, gen_cost(g, pg[g.i]) for g in data.gen)
 
     c_ref_angle = constraint(core, c_ref_angle_polar(va[i]) for i in data.ref_buses)
 
@@ -185,9 +185,7 @@ function opf_model(
     form = :polar,
     kwargs...,
 )
-
-    data = parse_ac_power_data(filename)
-    # data = convert_data(data, backend)
+    data :: Data{T} = parse_ac_power_data(T, filename)
 
     if form == :polar
         return build_polar_opf(data, backend = backend, T=T, kwargs...)

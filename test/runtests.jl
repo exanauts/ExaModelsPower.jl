@@ -58,6 +58,7 @@ function runtests()
             for (filename, case, test_function) in test_cases
                 #Test static opf
                 #Polar tests
+                @info "hi tests"
                 m, v, c = opf_model(filename; T=T, backend = backend)
                 result = madnlp(m; print_level = MadNLP.ERROR)
                 va, vm, pg, qg, p, q = v

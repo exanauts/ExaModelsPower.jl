@@ -1,106 +1,95 @@
 convert_data(data::N, backend) where {names,N<:NamedTuple{names}} =
     NamedTuple{names}(convert_array(d, backend) for d in data)
 
-Base.@kwdef mutable struct BusData
-    bus_i :: Int = 0
-    type :: Int = 0
-    pd :: Float64 = 0
-    qd :: Float64 = 0
-    gs :: Float64 = 0
-    bs :: Float64 = 0
-    area :: Float64 = 0
-    Vm :: Float64 = 0
-    Va :: Float64 = 0
-    baseKV :: Float64 = 0
-    zone :: Float64 = 0
-    vmax :: Float64 = 0
-    vmin :: Float64 = 0
+# FOR CONVENIENCE, the MATPOWER file spec
+# https://matpower.app/manual/matpower/DataFileFormat.html
+
+struct BusData{T <: Real}
+    bus_i :: Int
+    type :: Int
+    pd :: T
+    qd :: T
+    gs :: T
+    bs :: T
+    area :: T
+    Vm :: T
+    Va :: T
+    baseKV :: T
+    zone :: T
+    vmax :: T
+    vmin :: T
 end
-Base.@kwdef mutable struct BranchData
-    fbus :: Int = 0
-    tbus :: Int = 0
-    r :: Float64 = 0
-    x :: Float64 = 0
-    b :: Float64 = 0
-    ratea ::Int = 0
-    rateb :: Int = 0
-    ratec :: Int = 0
-    ratio :: Float64 = 0
-    angle :: Float64 = 0
-    status :: Int = 0
-    angmin :: Float64 = 0
-    angmax :: Float64 = 0
-    ratea_sq :: Int = 0
-    c1 :: Float64 = 0
-    c2 :: Float64 = 0
-    c3 :: Float64 = 0
-    c4 :: Float64 = 0
-    c5 :: Float64 = 0
-    c6 :: Float64 = 0
-    c7 :: Float64 = 0
-    c8 :: Float64 = 0
+struct BranchData{T <: Real}
+    fbus :: Int
+    tbus :: Int
+    r :: T
+    x :: T
+    b :: T
+    ratea ::Int
+    rateb :: Int
+    ratec :: Int
+    ratio :: T
+    angle :: T
+    status :: Int
+    angmin :: T
+    angmax :: T
+    ratea_sq :: Int
+    c1 :: T
+    c2 :: T
+    c3 :: T
+    c4 :: T
+    c5 :: T
+    c6 :: T
+    c7 :: T
+    c8 :: T
 end
-Base.@kwdef mutable struct StorageData
-    storage_bus :: Float64
+struct StorageData{T <: Real}
+    storage_bus :: T
     ps :: Int
-    qs :: Float64
-    energy :: Float64
-    energy_rating :: Float64
-    charge_rating :: Float64
-    discharge_rating :: Float64
-    charge_efficiency :: Float64
-    discharge_efficiency :: Float64
-    thermal_rating :: Float64
-    qmin :: Float64
-    qmax :: Float64
-    r :: Float64
-    x :: Float64
-    p_loss :: Float64
-    q_loss :: Float64
+    qs :: T
+    energy :: T
+    energy_rating :: T
+    charge_rating :: T
+    discharge_rating :: T
+    charge_efficiency :: T
+    discharge_efficiency :: T
+    thermal_rating :: T
+    qmin :: T
+    qmax :: T
+    r :: T
+    x :: T
+    p_loss :: T
+    q_loss :: T
     status :: Int
 end
-Base.@kwdef mutable struct GenData
-    bus :: Int = 0
-    pg :: Float64 = 0
-    qg :: Float64 = 0
-    qmax :: Float64 = 0
-    qmin :: Float64 = 0
-    vg :: Float64 = 0
-    mBase :: Float64 = 0
-    status :: Int = 0
-    pmax :: Float64 = 0
-    pmin :: Float64 = 0
-    _2 :: Int = 0
-    startup :: Float64 = 0
-    shutdown :: Float64 = 0
-    n :: Int = 0
-    c :: Vector{Float64} = Vector{Float64}()
+struct GenData{T <: Real}
+    bus :: Int
+    pg :: T
+    qg :: T
+    qmax :: T
+    qmin :: T
+    vg :: T
+    mBase :: T
+    status :: Int
+    pmax :: T
+    pmin :: T
+    startup :: Union{T, Nothing}
+    shutdown :: Union{T, Nothing}
+    n :: Union{Int, Nothing}
+    c :: Union{NTuple{3, T}, Nothing}
+    i :: Int
 end
 
-const MatPowerRow = Union{BusData, BranchData, StorageData, GenData}
-function set_fields!(x :: MatPowerRow, row :: Vector{Float64}, start :: Int64)
-    for (i, field) in enumerate(fieldnames(typeof(x))[start:end])
-        if i > length(row)
-            return
-        end
-        if typeof(getfield(x, field)) == Int
-            setfield!(x, field, round(Int, row[i]))
-        else
-            setfield!(x, field, row[i])
-        end
-    end
-end
-
-Base.@kwdef mutable struct Data
-    version :: String = ""
-    baseMVA :: Float64 = 0
-    bus :: Vector{BusData} = Vector{BusData}()
-    gen :: Vector{GenData} = Vector{GenData}()
-    branch :: Vector{BranchData} = Vector{BranchData}()
-    storage :: Vector{StorageData} = Vector{StorageData}()
-    ratea :: Vector{Float64} = Vector{Float64}()
-    arc :: Vector{Tuple{Int, Int, Int}} = Vector{Tuple{Int, Int, Int}}()
-    ref_buses :: Vector{Int} = Vector{Int}()
+struct Data{T <: Real}
+    version :: String
+    baseMVA :: Float64
+    bus :: Vector{BusData{T}}
+    gen :: Vector{GenData{T}}
+    branch :: Vector{BranchData{T}}
+    storage :: Vector{StorageData{T}}
+    ratea :: Vector{Int}
+    arc :: Vector{Tuple{Int, Int, Int}}
+    ref_buses :: Vector{Int}
 end
 
 MATPOWER_VAR_TYPES = [
@@ -113,26 +102,33 @@ MATPOWER_VAR_TYPES = [
     (name = "storage", type = StorageData);
 ]
 
-function parse_matpower_file(fname :: String) :: Data
+function parse_matpower_file(::Type{T}, fname :: String) :: Data{T} where T <: Real
     lines = split(read(open(fname), String), "\n")
     in_array = false
     cur_key = ""
-    data :: Data = Data()
+    version = ""
+    baseMVA = 0
+    bus :: Vector{BusData{T}} = []
+    gen :: Vector{GenData{T}} = []
+    branch :: Vector{BranchData{T}} = []
+    storage :: Vector{StorageData{T}} = []
     line_ind = 1
     line = lines[line_ind]
-    pattern = r"[^\s=;\[\]]+|[=;\[\]]"
+    data_patt = r"[^\s=;\[\]]+|[=;\[\]]"
+    col_patt = r"[^\s]+"
     type = Missing
     row_num = 1
+    comment = ""
+    col_inds = Dict()
 
     while true
-        line = split(line, "%")[1]
-        words = [m.match for m in eachmatch(pattern, line)]
+        words = [m.match for m in eachmatch(data_patt, line)]
 
-        if in_array
+        if in_array && length(line) != 0 && line[1] != '%'
             squares = findall(s -> s == "]", words)
             first_sq = length(squares) == 0 ? typemax(Int64) : squares[1]
             first_semi = length(squares) == 0 ? typemax(Int64) : squares[1]
-            items :: Vector{Float64} = map(s -> parse(Float64, s), words[1:min(min(first_semi - 1, first_sq - 1), length(words) - 1)])
+            items :: Vector{T} = map(s -> parse(T, s), words[1:min(min(first_semi - 1, first_sq - 1), length(words) - 1)])
 
             if length(items) == 0 && length(words) >= 2 && words[length(words)-1] == "]" && words[length(words)] == ";"
                 in_array = false
@@ -140,21 +136,65 @@ function parse_matpower_file(fname :: String) :: Data
                 error("Invalid matpower file. Line $(line_ind) array doesn't end with ; or ];")
             elseif length(items) != 0
                 if cur_key == "bus"
-                    push!(data.bus, BusData())
-                    set_fields!(data.bus[row_num], items, 1)
+                    push!(bus, BusData(
+                        round(Int, items[col_inds["bus_i"]]),
+                        round(Int, items[col_inds["type"]]),
+                        items[col_inds["Pd"]],
+                        items[col_inds["Qd"]],
+                        items[col_inds["Gs"]],
+                        items[col_inds["Bs"]],
+                        items[col_inds["area"]],
+                        items[col_inds["Vm"]],
+                        items[col_inds["Va"]],
+                        items[col_inds["baseKV"]],
+                        items[col_inds["zone"]],
+                        items[col_inds["Vmax"]],
+                        items[col_inds["Vmin"]],
+                    ))
                 elseif cur_key == "gen"
-                    push!(data.gen, GenData())
-                    set_fields!(data.gen[row_num], items, 1)
+                    push!(gen, GenData(
+                        round(Int, items[col_inds["bus"]]),
+                        items[col_inds["Pg"]],
+                        items[col_inds["Qg"]],
+                        items[col_inds["Qmax"]],
+                        items[col_inds["Qmin"]],
+                        items[col_inds["Vg"]],
+                        items[col_inds["mBase"]],
+                        round(Int, items[col_inds["status"]]),
+                        items[col_inds["Pmax"]],
+                        items[col_inds["Pmin"]],
+                        nothing,
+                        nothing,
+                        nothing,
+                        nothing,
+                        row_num,
+                    ))
                 elseif cur_key == "gencost"
-                    data.gen[row_num].c = items[5:end]
-                    set_fields!(data.gen[row_num], items[1:4], 11)
+                    first_cost_col = col_inds["n"] + 1
+                    print(col_inds)
+                    gen[row_num] = GenData(
+                        round(Int, gen[row_num].bus),
+                        gen[row_num].pg,
+                        gen[row_num].qg,
+                        gen[row_num].qmax,
+                        gen[row_num].qmin,
+                        gen[row_num].vg,
+                        gen[row_num].mBase,
+                        gen[row_num].status,
+                        gen[row_num].pmax,
+                        gen[row_num].pmin,
+                        items[col_inds["startup"]],
+                        items[col_inds["shutdown"]],
+                        round(Int, items[col_inds["n"]]),
+                        Tuple(items[first_cost_col:first_cost_col+2]),
+                        row_num,
+                    )
                 elseif cur_key == "branch"
-                    push!(data.branch, BranchData())
-                    set_fields!(data.branch[row_num], items, 1)
-                    branch = last(data.branch)
-                    branch = data.branch[length(data.branch)]
-                    branch.ratea_sq = branch.ratea_sq ^ 2
-                    x = branch.r + im * branch.x
+                    ratea_i = round(Int, items[col_inds["rateA"]])
+                    r = items[col_inds["r"]]
+                    xraw = items[col_inds["x"]]
+                    braw = items[col_inds["b"]]
+                    x = r + im * xraw
                     xi = inv(x)
                     y = ifelse(isfinite(xi), xi, zero(xi))
                     g = real(y)
@@ -176,24 +216,64 @@ function parse_matpower_file(fname :: String) :: Data
                     ## branch.c7 = (g + g_to)
                     ## branch.c8 = (b + b_to)
                     # g_fr, g_to, b_fr, b_to are all not in pglib
-                    b_fr = branch.b / 2.0
-                    b_to = b_fr
-                    branch.c1 = -g
-                    branch.c2 = -b
-                    branch.c3 = -g
-                    branch.c4 = -b
-                    branch.c5 = g
-                    branch.c6 = b + b_fr
-                    branch.c7 = g
-                    branch.c8 = b + b_to
+                    b_fr :: T = braw / 2.0
+                    b_to :: T = b_fr
+                    push!(branch, BranchData(
+                        round(Int, items[col_inds["fbus"]]),
+                        round(Int, items[col_inds["tbus"]]),
+                        r,
+                        xraw,
+                        braw,
+                        ratea_i,
+                        round(Int, items[col_inds["rateB"]]),
+                        round(Int, items[col_inds["rateC"]]),
+                        items[col_inds["ratio"]],
+                        items[col_inds["angle"]],
+                        round(Int, items[col_inds["status"]]),
+                        items[col_inds["angmin"]],
+                        items[col_inds["angmax"]],
+                        ratea_i ^ 2,
+                        -g,
+                        -b,
+                        -g,
+                        -b,
+                        g,
+                        b + b_fr,
+                        g,
+                        b + b_to
+                    ))
                 elseif cur_key == "storage"
-                    push!(data.storage, StorageData())
-                    set_fields!(data.storage[row_num], items, 1)
+                    push!(storage, StorageData(
+                        items[col_inds["storage_bus"]],
+                        items[col_inds["ps"]],
+                        items[col_inds["qs"]],
+                        items[col_inds["energy"]],
+                        items[col_inds["energy_rating"]],
+                        items[col_inds["charge_rating"]],
+                        items[col_inds["discharge_rating"]],
+                        items[col_inds["charge_efficiency"]],
+                        items[col_inds["discharge_efficiency"]],
+                        items[col_inds["thermal_rating"]],
+                        items[col_inds["qmin"]],
+                        items[col_inds["qmax"]],
+                        items[col_inds["r"]],
+                        items[col_inds["x"]],
+                        items[col_inds["p_loss"]],
+                        items[col_inds["q_loss"]],
+                        items[col_inds["status"]],
+                    ))
+                    set_fields!(storage[row_num], items, 1)
                 end
                 row_num += 1
             end
-
         elseif length(line) != 0 && line[1] != '%' && words[1] != "function"
+            col_inds = Dict()
+            columns = [m.match for m in eachmatch(col_patt, comment)][2:end]
+            comment = ""
+            for (i, column) in enumerate(columns)
+                merge!(col_inds, Dict(column => i))
+            end
+            print(col_inds)
             cur_key = ""
             type = Any
 
@@ -212,9 +292,9 @@ function parse_matpower_file(fname :: String) :: Data
             end
             if cur_key == "version"
                 raw_data = words[length(words)-1]
-                data.version = String(raw_data[2:length(raw_data)-1])
+                version = String(raw_data[2:length(raw_data)-1])
             elseif cur_key == "baseMVA"
-                data.baseMVA = parse(Float64, words[length(words)-1])
+                baseMVA = parse(Float64, words[length(words)-1])
             else
                 in_array = true
                 row_num = 1
@@ -222,6 +302,7 @@ function parse_matpower_file(fname :: String) :: Data
                 continue
             end
         elseif length(line) != 0 && line[1] == '%'
+            comment = line
         end
 
         if line_ind < length(lines)
@@ -230,10 +311,17 @@ function parse_matpower_file(fname :: String) :: Data
             break
         end
     end
-    return data
+
+    arc_from = [(i, b.fbus, b.tbus) for (i, b) in enumerate(branch)]
+    arc_to = [(i, b.tbus, b.fbus) for (i, b) in enumerate(branch)]
+    arc = [arc_from; arc_to]
+    ref_buses = filter(i -> (bus[i]).type != 3, 1:length(bus))
+    ratea = [branch[l].ratea for (l, _, _) in arc]
+
+    return Data(version, baseMVA, bus, gen, branch, storage, ratea, arc, ref_buses)
 end
 
-function standardize_cost_terms!(data :: Data, order)
+function standardize_cost_terms!(data :: Data{T}, order) where T <: Real
     gen_order = 1
     for (_, gen) in enumerate(data.gen)
         max_ind = 1
@@ -255,12 +343,29 @@ function standardize_cost_terms!(data :: Data, order)
         for i in 1:min(gen_order, length(cur_cost))
             std_cost[i] = cur_cost[i]
         end
-        gen.c = reverse(std_cost)
-        gen.n = length(gen_order)
+        c = reverse(std_cost)
+        n = length(gen_order)
+        data.gen[i] = GenData(
+            data.gen[i].bus,
+            data.gen[i].pg,
+            data.gen[i].qg,
+            data.gen[i].qmax,
+            data.gen[i].qmin,
+            data.gen[i].vg,
+            data.gen[i].mBase,
+            data.gen[i].status,
+            data.gen[i].pmax,
+            data.gen[i].pmin,
+            data.gen[i].startup,
+            data.gen[i].shutdown,
+            n,
+            c,
+            data.gen[i].i
+        )
     end
 end
 
-function calc_thermal_limits!(data :: Data)
+function calc_thermal_limits!(data :: Data{T}) where T <: Real
     for branch in filter(branch -> branch.ratea <= 0, data.branch)
         xi = inv(branch.r + im * branch.x)
         y_mag = abs.(ifelse(isfinite(xi), xi, zero(xi)))
@@ -276,11 +381,12 @@ function calc_thermal_limits!(data :: Data)
     end
 end
 
-function parse_ac_power_data(filename) :: Data
-    d, f = splitdir(filename)
+function parse_ac_power_data(::Type{T}, filename) :: Data{T} where T <: Real
+    _, f = splitdir(filename)
     name, ext = splitext(f)
+    @info "hi"
 
-    if isfile(joinpath(TMPDIR, name) * ".jld2") && false
+    if isfile(joinpath(TMPDIR, name) * ".jld2")
         @info "Loading cached JLD2 file"
         loaded = JLD2.load(joinpath(TMPDIR, name) * ".jld2")
         return loaded["data"]
@@ -298,25 +404,32 @@ function parse_ac_power_data(filename) :: Data
             joinpath(TMPDIR, name * ".m")
         end
         @info "Loading MATPOWER file"
-        return process_ac_power_data(ff)
+        return process_ac_power_data(T, ff)
     end
 end
 
-function process_ac_power_data(filename) :: Data
-    data = parse_matpower_file(filename)
+function process_ac_power_data(::Type{T}, filename) :: Data{T} where T <: Real
+    data = parse_matpower_file(T, filename)
     standardize_cost_terms!(data, 2)
     calc_thermal_limits!(data)
 
-    arc_from = [(i, b.fbus, b.tbus) for (i, b) in enumerate(data.branch)]
-    arc_to = [(i, b.tbus, b.fbus) for (i, b) in enumerate(data.branch)]
-    data.arc = [arc_from; arc_to]
-    data.ref_buses = filter(i -> (data.bus[i]).type != 3, 1:length(data.bus))
-    data.ratea = [data.branch[l].ratea for (l, _, _) in data.arc]
 
     @info "Saving JLD2 cache file"
     _, f = splitdir(filename)
     name, _ = splitext(f)
-    JLD2.save(joinpath(TMPDIR, name * ".jld2"), "data", data)
+    # JLD2.save(joinpath(TMPDIR, name * ".jld2"), "data", data)
     
     return data
+end
+
+function struct_to_nt(data :: T) where T <: DataType
+    result = ()
+    for field in fieldnames(T)
+        field_val = getfield(field, data)
+        if field_val <: DataType
+            field_val = struct_to_nt(field_val)
+        end
+        result = merge((field = field_val), result)
+    end
+    return result
 end

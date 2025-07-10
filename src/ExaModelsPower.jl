@@ -29,7 +29,6 @@ function __init__()
         global TMPDIR = joinpath(@__DIR__,"..","data")
         mkpath(TMPDIR)
     end
-    PowerModels.silence()
 end
 
 end # module ExaModelsExamples

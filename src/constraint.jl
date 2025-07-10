@@ -1,4 +1,4 @@
-function gen_cost(g :: GenData, pg)
+function gen_cost(g, pg)
     return g.c[1] * pg^2 + g.c[2] * pg + g.c[3]
 end
 
