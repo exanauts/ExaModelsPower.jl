@@ -16,29 +16,30 @@ function scopf_model(
     sc_data, lengths = parse_sc_data(data, uc_data, data_json)
     
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
-    L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q) = lengths
+    L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q, L_W_en_min_pr, L_W_en_min_cs, L_W_en_max_pr, L_W_en_max_cs, K) = lengths
 
-    L_W_en_min_pr = length(sc_data.W_en_min_pr)
-    L_W_en_min_cs = length(sc_data.W_en_min_cs)
-    L_W_en_max_pr = length(sc_data.W_en_max_pr)
-    L_W_en_max_cs = length(sc_data.W_en_max_cs)
-    K = length(data_json["reliability"]["contingency"])
-    c_p = data.violation_cost["p_bus_vio_cost"]
-    c_q = data.violation_cost["q_bus_vio_cost"]
-    c_s = data.violation_cost["s_vio_cost"]
-    c_e = data.violation_cost["e_vio_cost"]
+    #L_W_en_min_pr = length(sc_data.W_en_min_pr)
+    #L_W_en_min_cs = length(sc_data.W_en_min_cs)
+    #L_W_en_max_pr = length(sc_data.W_en_max_pr)
+    #L_W_en_max_cs = length(sc_data.W_en_max_cs)
+    #K = length(data_json["reliability"]["contingency"])
+    #c_p = data.violation_cost["p_bus_vio_cost"]
+    #c_q = data.violation_cost["q_bus_vio_cost"]
+    #c_s = data.violation_cost["s_vio_cost"]
+    #c_e = data.violation_cost["e_vio_cost"]
 
     
-    p_jtm_pr_uvar = [b.p_max for b in sc_data.p_jtm_flattened_pr]
-    p_jtm_cs_uvar = [b.p_max for b in sc_data.p_jtm_flattened_cs]
-    p_jt_fr_dc_lvar = [-dc.pdc_max for dc in sc_data.dclinearray]
-    p_jt_fr_dc_uvar = [dc.pdc_max for dc in sc_data.dclinearray]
-    p_jt_to_dc_lvar = [-dc.pdc_max for dc in sc_data.dclinearray]
-    p_jt_to_dc_uvar = [dc.pdc_max for dc in sc_data.dclinearray]
-    q_jt_fr_dc_lvar = [dc.qdc_fr_min for dc in sc_data.dclinearray]
-    q_jt_fr_dc_uvar = [dc.qdc_fr_max for dc in sc_data.dclinearray]
-    q_jt_to_dc_lvar = [dc.qdc_to_min for dc in sc_data.dclinearray]
-    q_jt_to_dc_uvar = [dc.qdc_to_max for dc in sc_data.dclinearray]
+    #p_jtm_pr_uvar = [b.p_max for b in sc_data.p_jtm_flattened_pr]
+    #p_jtm_cs_uvar = [b.p_max for b in sc_data.p_jtm_flattened_cs]
+
+    #p_jt_fr_dc_lvar = [-dc.pdc_max for dc in sc_data.dclinearray]
+    #p_jt_fr_dc_uvar = [dc.pdc_max for dc in sc_data.dclinearray]
+    #p_jt_to_dc_lvar = [-dc.pdc_max for dc in sc_data.dclinearray]
+    #p_jt_to_dc_uvar = [dc.pdc_max for dc in sc_data.dclinearray]
+    #q_jt_fr_dc_lvar = [dc.qdc_fr_min for dc in sc_data.dclinearray]
+    #q_jt_fr_dc_uvar = [dc.qdc_fr_max for dc in sc_data.dclinearray]
+    #q_jt_to_dc_lvar = [dc.qdc_to_min for dc in sc_data.dclinearray]
+    #q_jt_to_dc_uvar = [dc.qdc_to_max for dc in sc_data.dclinearray]
 
     #=
     z_jt_on_pr = sum([pr.dt*pr.c_on*pr.u_on for pr in sc_data.prarray])
@@ -130,22 +131,22 @@ function scopf_model(
     p_jt_sd_cs = variable(core, L_J_cs, L_T; start = initialize_vars ? Array(solution(result, vars.p_jt_sd_cs)) : ones(L_J_cs, L_T))
     #p_jtm has been flattened and uses only one special index, k_flat
     #Bounds from 4.6.9 Energy cost and value (129)
-    p_jtm_pr = variable(core, length(sc_data.p_jtm_flattened_pr); lvar = zeros(size(sc_data.p_jtm_flattened_pr)), uvar = p_jtm_pr_uvar, start = initialize_vars ? Array(solution(result, vars.p_jtm_pr)) : ones(length(sc_data.p_jtm_flattened_pr)))
-    p_jtm_cs = variable(core, length(sc_data.p_jtm_flattened_cs); lvar = zeros(size(sc_data.p_jtm_flattened_cs)), uvar = p_jtm_cs_uvar, start = initialize_vars ? Array(solution(result, vars.p_jtm_cs)) : ones(length(sc_data.p_jtm_flattened_cs)))
+    p_jtm_pr = variable(core, length(sc_data.p_jtm_flattened_pr); lvar = zeros(size(sc_data.p_jtm_flattened_pr)), uvar = sc_data.p_jtm_pr_uvar, start = initialize_vars ? Array(solution(result, vars.p_jtm_pr)) : ones(length(sc_data.p_jtm_flattened_pr)))
+    p_jtm_cs = variable(core, length(sc_data.p_jtm_flattened_cs); lvar = zeros(size(sc_data.p_jtm_flattened_cs)), uvar = sc_data.p_jtm_cs_uvar, start = initialize_vars ? Array(solution(result, vars.p_jtm_cs)) : ones(length(sc_data.p_jtm_flattened_cs)))
     #to/from power split into ln, xf, and dc lines
     #Bounds from 4.8.4 DC lines (152-155)
     p_jt_fr_ln = variable(core, L_J_ln, L_T; start = initialize_vars ? Array(solution(result, vars.p_jt_fr_ln)) : ones(L_J_ln, L_T))
     p_jt_fr_xf = variable(core, L_J_xf, L_T; start = initialize_vars ? Array(solution(result, vars.p_jt_fr_xf)) : ones(L_J_xf, L_T))
-    p_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = p_jt_fr_dc_lvar, uvar = p_jt_fr_dc_uvar, start = initialize_vars ? Array(solution(result, vars.p_jt_fr_dc)) : ones(L_J_dc, L_T))
+    p_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = -sc_data.p_jt_fr_dc_max, uvar = sc_data.p_jt_fr_dc_max, start = initialize_vars ? Array(solution(result, vars.p_jt_fr_dc)) : ones(L_J_dc, L_T))
     p_jt_to_ln = variable(core, L_J_ln, L_T; start = initialize_vars ? Array(solution(result, vars.p_jt_to_ln)) : ones(L_J_ln, L_T))
     p_jt_to_xf = variable(core, L_J_xf, L_T; start = initialize_vars ? Array(solution(result, vars.p_jt_to_xf)) : ones(L_J_xf, L_T))
-    p_jt_to_dc = variable(core, L_J_dc, L_T; lvar = p_jt_to_dc_lvar, uvar = p_jt_to_dc_uvar, start = initialize_vars ? Array(solution(result, vars.p_jt_to_dc)) : ones(L_J_dc, L_T))
+    p_jt_to_dc = variable(core, L_J_dc, L_T; lvar = -sc_data.p_jt_to_dc_max, uvar = sc_data.p_jt_to_dc_max, start = initialize_vars ? Array(solution(result, vars.p_jt_to_dc)) : ones(L_J_dc, L_T))
     q_jt_fr_ln = variable(core, L_J_ln, L_T; start = initialize_vars ? Array(solution(result, vars.q_jt_fr_ln)) : ones(L_J_ln, L_T))
     q_jt_fr_xf = variable(core, L_J_xf, L_T; start = initialize_vars ? Array(solution(result, vars.q_jt_fr_xf)) : ones(L_J_xf, L_T))
-    q_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = q_jt_fr_dc_lvar, uvar = q_jt_fr_dc_uvar, start = initialize_vars ? Array(solution(result, vars.q_jt_fr_dc)) : ones(L_J_dc, L_T))
+    q_jt_fr_dc = variable(core, L_J_dc, L_T; lvar = sc_data.q_jt_fr_dc_lvar, uvar = sc_data.q_jt_fr_dc_uvar, start = initialize_vars ? Array(solution(result, vars.q_jt_fr_dc)) : ones(L_J_dc, L_T))
     q_jt_to_ln = variable(core, L_J_ln, L_T; start = initialize_vars ? Array(solution(result, vars.q_jt_to_ln)) : ones(L_J_ln, L_T))
     q_jt_to_xf = variable(core, L_J_xf, L_T; start = initialize_vars ? Array(solution(result, vars.q_jt_to_xf)) : ones(L_J_xf, L_T))
-    q_jt_to_dc = variable(core, L_J_dc, L_T; lvar = q_jt_to_dc_lvar, uvar = q_jt_to_dc_uvar, start = initialize_vars ? Array(solution(result, vars.q_jt_to_dc)) : ones(L_J_dc, L_T))
+    q_jt_to_dc = variable(core, L_J_dc, L_T; lvar = sc_data.q_jt_to_dc_lvar, uvar = sc_data.q_jt_to_dc_uvar, start = initialize_vars ? Array(solution(result, vars.q_jt_to_dc)) : ones(L_J_dc, L_T))
     #p_jt rgu, rgd, scr, rru,on, rru,off, rrd,on, rrd,off and q_jt qru/qrd split into pr and cs
     #bounds from 4.6.4 Device reserve variable domains (80-89)
     p_jt_rgu_pr = variable(core, L_J_pr, L_T; lvar = zeros(size(sc_data.prarray)), start = initialize_vars ? Array(solution(result, vars.p_jt_rgu_pr)) : ones(L_J_pr, L_T))
@@ -259,12 +260,11 @@ function scopf_model(
     end
     
 
-    #objective does not include contingencies rn
     #4.1 Market surplus objective
     #constraint (6-9)
     #All objectives are negative so that we can minimize
 
-    #Removing all uc variables, which include z_on, z_su, z_sd, z_sus
+    #Removing all uc variables, which include z_on, z_su, z_sd, z_sus. Note that this means objective value from ExaModelsPower will not match the objective calculated for the full GOC3 model, even though we still are solving the same problem (with UC as constants)
 
     if include_ctg
         o2 = objective(core, -z_t_ctg_min[t] for t in sc_data.periods)
@@ -317,8 +317,8 @@ function scopf_model(
     c_13 = constraint(core, q_it_plus[b.i, b.t] - q_it[b.i, b.t] for b in sc_data.busarray; ucon = fill(Inf, size(sc_data.busarray)))
     c_14 = constraint(core, q_it_plus[b.i, b.t] + q_it[b.i, b.t] for b in sc_data.busarray; ucon = fill(Inf, size(sc_data.busarray)))
     #4.2.2 Bus pwoer mismatch penalty
-    c15 = constraint(core, z_it_p[b.i, b.t] - b.dt*c_p*p_it_plus[b.i, b.t] for b in sc_data.busarray)
-    c16 = constraint(core, z_it_q[b.i, b.t] - b.dt*c_q*q_it_plus[b.i, b.t] for b in sc_data.busarray)
+    c15 = constraint(core, z_it_p[b.i, b.t] - b.dt*sum(sc_data.c_p)*p_it_plus[b.i, b.t] for b in sc_data.busarray)
+    c16 = constraint(core, z_it_q[b.i, b.t] - b.dt*sum(sc_data.c_q)*q_it_plus[b.i, b.t] for b in sc_data.busarray)
     #4.2.3 Bus real and reactive power balance
     c17 = constraint(core, p_it[b.i, b.t] for b in sc_data.busarray)
     c17_pr = constraint!(core, c17, pr.bus + I*(pr.t-1) => p_jt_pr[pr.j_pr, pr.t] for pr in sc_data.prarray)
@@ -433,10 +433,10 @@ function scopf_model(
     c76_pr_a = constraint!(core, c76_pr, t.w_en_min_pr_ind => -t.dt*p_jt_pr[t.j_pr, t.t] for t in sc_data.T_w_en_min_pr)
     c76_cs = constraint(core, e_w_plus_min_cs[w.w_en_min_cs_ind] - w.e_min for w in sc_data.W_en_min_cs; lcon = fill(-Inf, size(sc_data.W_en_min_cs)))
     c76_cs_a = constraint!(core, c76_cs, t.w_en_min_cs_ind => -t.dt*p_jt_cs[t.j_cs, t.t] for t in sc_data.T_w_en_min_cs)
-    c78_pr = constraint(core, z_w_en_max_pr[w.w_en_max_pr_ind] - c_e*e_w_plus_max_pr[w.w_en_max_pr_ind] for w in sc_data.W_en_max_pr)
-    c78_cs = constraint(core, z_w_en_max_cs[w.w_en_max_cs_ind] - c_e*e_w_plus_max_cs[w.w_en_max_cs_ind] for w in sc_data.W_en_max_cs)
-    c79_pr = constraint(core, z_w_en_min_pr[w.w_en_min_pr_ind] - c_e*e_w_plus_min_pr[w.w_en_min_pr_ind] for w in sc_data.W_en_min_pr)
-    c79_cs = constraint(core, z_w_en_min_cs[w.w_en_min_cs_ind] - c_e*e_w_plus_min_cs[w.w_en_min_cs_ind] for w in sc_data.W_en_min_cs)
+    c78_pr = constraint(core, z_w_en_max_pr[w.w_en_max_pr_ind] - sum(sc_data.c_e)*e_w_plus_max_pr[w.w_en_max_pr_ind] for w in sc_data.W_en_max_pr)
+    c78_cs = constraint(core, z_w_en_max_cs[w.w_en_max_cs_ind] - sum(sc_data.c_e)*e_w_plus_max_cs[w.w_en_max_cs_ind] for w in sc_data.W_en_max_cs)
+    c79_pr = constraint(core, z_w_en_min_pr[w.w_en_min_pr_ind] - sum(sc_data.c_e)*e_w_plus_min_pr[w.w_en_min_pr_ind] for w in sc_data.W_en_min_pr)
+    c79_cs = constraint(core, z_w_en_min_cs[w.w_en_min_cs_ind] - sum(sc_data.c_e)*e_w_plus_min_cs[w.w_en_min_cs_ind] for w in sc_data.W_en_min_cs)
 
     #4.6.5 Device reserve costs
     #p_jt split into pr and cs
@@ -525,8 +525,8 @@ function scopf_model(
 
     #4.8.1 AC branch flow limits and penalties
     #AC branches split into ln and xf
-    c139_ln = constraint(core, z_jt_s_ln[ln.j_ln, ln.t] - ln.dt*c_s*s_jt_plus_ln[ln.j_ln, ln.t] for ln in sc_data.aclbrancharray)
-    c139_xf = constraint(core, z_jt_s_xf[xf.j_xf, xf.t] -xf.dt*c_s*s_jt_plus_xf[xf.j_xf, xf.t] for xf in sc_data.acxbrancharray)
+    c139_ln = constraint(core, z_jt_s_ln[ln.j_ln, ln.t] - ln.dt*sum(sc_data.c_s)*s_jt_plus_ln[ln.j_ln, ln.t] for ln in sc_data.aclbrancharray)
+    c139_xf = constraint(core, z_jt_s_xf[xf.j_xf, xf.t] -xf.dt*sum(sc_data.c_s)*s_jt_plus_xf[xf.j_xf, xf.t] for xf in sc_data.acxbrancharray)
     c140_ln = constraint(core, (p_jt_fr_ln[ln.j_ln, ln.t]^2 + q_jt_fr_ln[ln.j_ln, ln.t]^2)^.5 - ln.s_max - s_jt_plus_ln[ln.j_ln, ln.t] for ln in sc_data.aclbrancharray;
                         lcon = fill(-Inf, size(sc_data.aclbrancharray)))
     c140_xf = constraint(core, (p_jt_fr_xf[xf.j_xf, xf.t]^2 + q_jt_fr_xf[xf.j_xf, xf.t]^2)^.5 - xf.s_max - s_jt_plus_xf[xf.j_xf, xf.t] for xf in sc_data.acxbrancharray;
@@ -573,8 +573,8 @@ function scopf_model(
     #4.9.1 Penalty on post-contingency AC branch overload
     if include_ctg
         #ac split into ln and xf
-        c158_ln = constraint(core, ln.dt*c_s*s_jtk_plus_ln[ln.flat_jtk_ln] - z_jtk_s_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened)
-        c158_xf = constraint(core, xf.dt*c_s*s_jtk_plus_xf[xf.flat_jtk_xf] - z_jtk_s_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened)
+        c158_ln = constraint(core, ln.dt*sum(sc_data.c_s)*s_jtk_plus_ln[ln.flat_jtk_ln] - z_jtk_s_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened)
+        c158_xf = constraint(core, xf.dt*sum(sc_data.c_s)*s_jtk_plus_xf[xf.flat_jtk_xf] - z_jtk_s_xf[xf.flat_jtk_xf] for xf in sc_data.jtk_xf_flattened)
 
         #4.9.2 Post-contingency AC power flow limits
         c159_ln = constraint(core, (p_jtk_ln[ln.flat_jtk_ln]^2 + q_jt_fr_ln[ln.j_ln, ln.t]^2)^0.5 - ln.s_max_ctg - s_jtk_plus_ln[ln.flat_jtk_ln] for ln in sc_data.jtk_ln_flattened;

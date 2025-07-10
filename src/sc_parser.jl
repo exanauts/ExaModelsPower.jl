@@ -496,6 +496,7 @@ function parse_sc_data(data, uc_data, data_json)
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
     L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q) = lengths
     periods = data.periods
+    K = length(data_json["reliability"]["contingency"])
     add_status_flags(uc_data["time_series_output"]["ac_line"], data.ac_line_lookup)
     add_status_flags(uc_data["time_series_output"]["two_winding_transformer"], data.twt_lookup)
     add_status_flags(uc_data["time_series_output"]["simple_dispatchable_device"], data.sdd_lookup)
@@ -520,6 +521,7 @@ function parse_sc_data(data, uc_data, data_json)
             for uc in uc_data["time_series_output"]["simple_dispatchable_device"]
             if val["uid"] == uc["uid"]
         ]
+
     #Build a p_sdpc set to be used for T_sdpc
     #Index order is j_prcs, t, t_prime
     p_sdpc = zeros(L_J_cspr, length(data.dt), length(data.dt))
@@ -663,6 +665,8 @@ function parse_sc_data(data, uc_data, data_json)
         end
     end
 
+    L_W_en_max_pr = length(W_en_max_pr)
+
     W_en_max_cs = Vector{@NamedTuple{w_en_max_cs_ind::Int, j::Int, j_prcs::Int, j_cs::Int, a_en_max_start::Float64, a_en_max_end::Float64, e_max::Float64}}()
     w_en_max_cs_ind = 1
     for val in values(data.sdd_lookup) 
@@ -674,6 +678,8 @@ function parse_sc_data(data, uc_data, data_json)
             end
         end
     end
+
+    L_W_en_max_cs = length(W_en_max_cs)
 
     W_en_min_pr = Vector{@NamedTuple{w_en_min_pr_ind::Int, j::Int, j_prcs::Int, j_pr::Int, a_en_min_start::Float64, a_en_min_end::Float64, e_min::Float64}}()
     w_en_min_pr_ind = 1
@@ -692,6 +698,8 @@ function parse_sc_data(data, uc_data, data_json)
         end
     end
 
+    L_W_en_min_pr = length(W_en_min_pr)
+
     W_en_min_cs = Vector{@NamedTuple{w_en_min_cs_ind::Int, j::Int, j_prcs::Int, j_cs::Int, a_en_min_start::Float64, a_en_min_end::Float64, e_min::Float64}}()
     w_en_min_cs_ind = 1
     for val in values(data.sdd_lookup)
@@ -708,6 +716,8 @@ function parse_sc_data(data, uc_data, data_json)
             end
         end
     end
+
+    L_W_en_min_cs = length(W_en_min_cs)
 
     T_w_en_max_pr = Vector{@NamedTuple{w_en_max_pr_ind::Int, j::Int, j_prcs::Int, j_pr::Int, t::Int, dt::Float64}}()
     w_en_max_pr_ind = 0
@@ -887,6 +897,11 @@ function parse_sc_data(data, uc_data, data_json)
         periods = periods,
 
         tk_index = [(t=t, k=k) for t in periods, k in 1:length(data_json["reliability"]["contingency"])],
+
+        c_p = [data.violation_cost["p_bus_vio_cost"]],
+        c_q = [data.violation_cost["q_bus_vio_cost"]],
+        c_s = [data.violation_cost["s_vio_cost"]],
+        c_e = [data.violation_cost["e_vio_cost"]],
         busarray = [(;b..., t=t, dt=sc_data.dt[t]) for b in sc_data.bus, t in periods],
         k_busarray = [(;b..., t=t, k=k) for b in sc_data.bus, t in periods, k in 1:length(data_json["reliability"]["contingency"])],
         shuntarray = [
@@ -1021,12 +1036,22 @@ function parse_sc_data(data, uc_data, data_json)
         vpdarray = isempty(sc_data.vpd) ? empty_data = empty_vpd : [(;b..., t=t) for b in sc_data.vpd, t in periods],
         vwrarray = isempty(sc_data.vwr) ? empty_data = empty_vwr : [(;b..., t=t) for b in sc_data.vwr, t in periods],
         dclinearray = [(;b..., t=t) for b in sc_data.dc_branch, t in periods],
+
+        p_jt_fr_dc_max = [dc.pdc_max for dc in sc_data.dc_branch, t in periods],
+        p_jt_to_dc_max = [dc.pdc_max for dc in sc_data.dc_branch, t in periods],
+        q_jt_fr_dc_lvar = [dc.qdc_fr_min for dc in sc_data.dc_branch, t in periods],
+        q_jt_fr_dc_uvar = [dc.qdc_fr_max for dc in sc_data.dc_branch, t in periods],
+        q_jt_to_dc_lvar = [dc.qdc_to_min for dc in sc_data.dc_branch, t in periods],
+        q_jt_to_dc_uvar = [dc.qdc_to_max for dc in sc_data.dc_branch, t in periods],
+
         preservesetarray_pr = [(;b..., t=t) for b in sc_data.active_reserve_set_pr, t in periods],
         preservesetarray_cs = [(;b..., t=t) for b in sc_data.active_reserve_set_cs, t in periods],
         qreservesetarray_pr = [(;b..., t=t) for b in sc_data.reactive_reserve_set_pr, t in periods],
         qreservesetarray_cs = [(;b..., t=t) for b in sc_data.reactive_reserve_set_cs, t in periods],
         p_jtm_flattened_pr=p_jtm_flattened_pr,
         p_jtm_flattened_cs=p_jtm_flattened_cs,
+        p_jtm_pr_uvar = [b.p_max for b in p_jtm_flattened_pr],
+        p_jtm_cs_uvar = [b.p_max for b in p_jtm_flattened_cs],
         W_en_max_pr=W_en_max_pr,
         W_en_max_cs=W_en_max_cs,
         T_w_en_max_pr=T_w_en_max_pr,
@@ -1044,13 +1069,16 @@ function parse_sc_data(data, uc_data, data_json)
 
     )
 
+    lengths = (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
+    L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q, L_W_en_min_pr, L_W_en_min_cs, L_W_en_max_pr, L_W_en_max_cs, K)
+
     return sc_time_data, lengths
 end
 
 function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
     uc_data = JSON.parsefile(uc_filename)
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
-    L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q) = lengths
+    L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q, L_W_en_min_pr, L_W_en_min_cs, L_W_en_max_pr, L_W_en_max_cs, K) = lengths
     #Update simple dispatchable devices
     for line in uc_data["time_series_output"]["simple_dispatchable_device"]
         solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to j_prcs
