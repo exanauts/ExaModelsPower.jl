@@ -157,7 +157,7 @@ function scopf_model(
     # Difference of angles
     c6 = ExaModels.constraint(
         core,
-        va[b.f_bus, k] - va[b.t_bus, k] for (b, k) in data.idx_branch
+        va[b.f_bus, k] - va[b.t_bus, k] for (b, k) in data.idx_branch;
         lcon = repeat(data.angmin, data.K),
         ucon = repeat(data.angmax, data.K),
     )
