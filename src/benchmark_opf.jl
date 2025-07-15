@@ -3,14 +3,76 @@ using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra
 
 cases = [
 "pglib_opf_case3_lmbd.m",
+"pglib_opf_case5_pjm.m", 
+"pglib_opf_case14_ieee.m", 
+"pglib_opf_case24_ieee_rts.m", 
+"pglib_opf_case30_as.m", 
+"pglib_opf_case30_ieee.m", 
+"pglib_opf_case5_pjm.m",
+"pglib_opf_case14_ieee.m",
+"pglib_opf_case24_ieee_rts.m",
+"pglib_opf_case30_as.m",
 "pglib_opf_case30_ieee.m",
+"pglib_opf_case39_epri.m",
+"pglib_opf_case57_ieee.m",
+"pglib_opf_case60_c.m",
+"pglib_opf_case73_ieee_rts.m",
+"pglib_opf_case89_pegase.m",
+"pglib_opf_case118_ieee.m",
+"pglib_opf_case162_ieee_dtc.m",
 "pglib_opf_case179_goc.m",
+"pglib_opf_case197_snem.m",
+"pglib_opf_case200_activ.m",
+"pglib_opf_case240_pserc.m",
+"pglib_opf_case300_ieee.m",
+"pglib_opf_case500_goc.m",
+"pglib_opf_case588_sdet.m",
 "pglib_opf_case793_goc.m",
+"pglib_opf_case1354_pegase.m",
+"pglib_opf_case1803_snem.m",
+"pglib_opf_case1888_rte.m",
 "pglib_opf_case1951_rte.m",
+"pglib_opf_case2000_goc.m",
+"pglib_opf_case2312_goc.m",
+"pglib_opf_case2383wp_k.m",
+"pglib_opf_case2736sp_k.m",
+"pglib_opf_case2737sop_k.m",
+"pglib_opf_case2742_goc.m",
+"pglib_opf_case2746wop_k.m",
+"pglib_opf_case2746wp_k.m",
+"pglib_opf_case2848_rte.m",
+"pglib_opf_case2853_sdet.m",
+"pglib_opf_case2868_rte.m",
 "pglib_opf_case2869_pegase.m",
+"pglib_opf_case3012wp_k.m",
+"pglib_opf_case3022_goc.m",
+"pglib_opf_case3120sp_k.m",
+"pglib_opf_case3375wp_k.m",
+"pglib_opf_case3970_goc.m",
+"pglib_opf_case4020_goc.m",
+"pglib_opf_case4601_goc.m",
+"pglib_opf_case4619_goc.m",
+"pglib_opf_case4661_sdet.m",
+"pglib_opf_case4837_goc.m",
+"pglib_opf_case4917_goc.m",
 "pglib_opf_case5658_epigrids.m",
+"pglib_opf_case6468_rte.m",
+"pglib_opf_case6470_rte.m",
+"pglib_opf_case6495_rte.m",
+"pglib_opf_case6515_rte.m",
+"pglib_opf_case7336_epigrids.m",
+"pglib_opf_case8387_pegase.m",
+"pglib_opf_case9241_pegase.m",
+"pglib_opf_case9591_goc.m",
+"pglib_opf_case10000_goc.m",
 "pglib_opf_case10192_epigrids.m",
-"pglib_opf_case78484_epigrids.m"]
+"pglib_opf_case10480_goc.m",
+"pglib_opf_case13659_pegase.m",
+"pglib_opf_case19402_goc.m",
+"pglib_opf_case20758_epigrids.m",
+"pglib_opf_case24464_goc.m",
+"pglib_opf_case30000_goc.m",
+"pglib_opf_case78484_epigrids.m",]
 
 function termination_code(status::MadNLP.Status)
     if status == MadNLP.SOLVE_SUCCEEDED
@@ -57,13 +119,35 @@ function ipopt_stats(fname)
 end
 
 using PrettyTables                # at the top of the file
-using PrettyTables: tf_latex_booktabs
+using PrettyTables: tf_latex_booktabs, LatexTableFormat
+
+# after you assemble `methods` and `subs`
+function group_boundaries(methods, subs)
+    idx  = Int[0, 1]             # columns AFTER which a line is inserted
+    col  = 1                 # 1st column = "Case"
+
+    for m in methods
+        col += length(subs[m])
+        push!(idx, col)      # boundary just after each group
+    end
+
+    return idx               # e.g. [4, 7, 9] for groups of size 3,3,2
+end
+
+
+
 
 function generate_tex(opf_results; filename="benchmark_results.tex")
+
+    #tf_bt_vlines = deepcopy(tf_latex_booktabs)
+    #tf_bt_vlines.col_separator = "|"          # enable vertical bars
     # ————————————————————————————————————————————————————————————
     #  Collect all cases and decide the column layout you want
     # ————————————————————————————————————————————————————————————
-    cases   = sort([c for c in keys(opf_results) if c != :tol])
+    cases = sort(
+        [c for c in keys(opf_results) if c != :tol],
+        by = x -> parse(Int, match(r"\d+", x).match)
+    )
 
     # explicit ordering ⇣   adjust / reorder as you like
     methods = [:gpu_polar, :gpu_rect, :cpu_polar, :cpu_rect]
@@ -96,14 +180,21 @@ function generate_tex(opf_results; filename="benchmark_results.tex")
 
     table_data = permutedims(reduce(hcat, rows))   # n_cases × n_cols matrix
 
+    nrows = length(rows)
+    hlines = vcat(0, 1, collect(6:5:nrows), nrows+1)
+
     # two‑level header: top = method name, bottom = metric name
     h_top    = ["Case"]
     h_bottom = [""]
+
     for m in methods
-        n = length(subs[m])
-        append!(h_top,    fill(string(m), n))
-        append!(h_bottom, string.(subs[m]))
+        n = length(subs[m])                   # how many sub‑columns
+        push!(h_top, string(m))               # first column in the span
+        append!(h_top, fill("", n-1))    # placeholders for the rest
+        append!(h_bottom, string.(subs[m]))   # the sub‑headers themselves
     end
+
+    vlines = group_boundaries(methods, subs)
 
     # ————————————————————————————————————————————————————————————
     #  Write the .tex file
@@ -113,8 +204,10 @@ function generate_tex(opf_results; filename="benchmark_results.tex")
             io, table_data;
             header = (h_top, h_bottom),
             backend = Val(:latex),
-            tf = tf_latex_booktabs,   # ⟹ booktabs rules
-            alignment = :l            # left align everything
+            tf = tf_latex_default,   # ⟹ booktabs rules
+            alignment = :c,           # left align everything
+            vlines   = vlines,
+            hlines   = hlines 
         )
     end
 end
