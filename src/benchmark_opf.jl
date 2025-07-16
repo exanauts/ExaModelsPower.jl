@@ -29,7 +29,8 @@ cases = [
 "pglib_opf_case588_sdet.m",
 "pglib_opf_case793_goc.m",
 "pglib_opf_case1354_pegase.m",
-"pglib_opf_case1803_snem.m",
+"pglib_opf_case10192_epigrids.m"]
+#="pglib_opf_case1803_snem.m",
 "pglib_opf_case1888_rte.m",
 "pglib_opf_case1951_rte.m",
 "pglib_opf_case2000_goc.m",
@@ -72,7 +73,7 @@ cases = [
 "pglib_opf_case20758_epigrids.m",
 "pglib_opf_case24464_goc.m",
 "pglib_opf_case30000_goc.m",
-"pglib_opf_case78484_epigrids.m",]
+"pglib_opf_case78484_epigrids.m",]=#
 
 function termination_code(status::MadNLP.Status)
     if status == MadNLP.SOLVE_SUCCEEDED
@@ -118,7 +119,7 @@ function ipopt_stats(fname)
     return iter, tot, ad
 end
 
-using PrettyTables                # at the top of the file
+using PrettyTables, Printf                # at the top of the file
 using PrettyTables: tf_latex_booktabs, LatexTableFormat
 
 # after you assemble `methods` and `subs`
@@ -137,96 +138,193 @@ end
 
 
 
-function generate_tex(opf_results; filename="benchmark_results.tex")
-
-    #tf_bt_vlines = deepcopy(tf_latex_booktabs)
-    #tf_bt_vlines.col_separator = "|"          # enable vertical bars
-    # ————————————————————————————————————————————————————————————
-    #  Collect all cases and decide the column layout you want
-    # ————————————————————————————————————————————————————————————
+function generate_tex_opf(opf_results, coords; filename="benchmark_results_opf.tex")
     cases = sort(
         [c for c in keys(opf_results) if c != :tol],
         by = x -> parse(Int, match(r"\d+", x).match)
     )
 
-    # explicit ordering ⇣   adjust / reorder as you like
-    methods = [:gpu_polar, :gpu_rect, :cpu_polar, :cpu_rect]
-
-    # what sub‑columns belong under each method header?
+    methods = ["GPU "*coords, "CPU "*coords]
     subs = Dict(
-        :gpu_polar => [:iter, :soltime, :inittime, :adtime,
-                       :lintime, :termination, :obj, :cvio],
-        :gpu_rect  => [:iter, :soltime, :inittime, :adtime,
-                       :lintime, :termination, :obj, :cvio],
-        :cpu_polar => [:iter, :soltime,            :adtime,
-                       :termination, :obj, :cvio],
-        :cpu_rect  => [:iter, :soltime,            :adtime,
-                       :termination, :obj, :cvio],
+        "GPU "*coords => [:iter, :soltime, :inittime, :adtime,
+                          :lintime, :termination, :obj, :cvio],
+        "CPU "*coords => [:iter, :soltime,            :adtime,
+                          :termination, :obj, :cvio],
     )
 
-    # ————————————————————————————————————————————————————————————
-    #  Build the data matrix (rows) and the two‑level header
-    # ————————————————————————————————————————————————————————————
+    format_val(field, val) =
+    (val === missing || val === nothing) ? missing :
+    !(val isa Number) ? string(val) :
+    field == :iter ? string(Int(round(val))) :
+    field in [:obj, :cvio] ? @sprintf("%.6e", val) :
+    @sprintf("%.3e", round(val, sigdigits=4))
+
+
     rows = Any[]
     for case in cases
-        row = Any[case]   # left‑hand label
+        clean_case = replace(case, r"^pglib_opf_case" => "", r"\.m$" => "")
+        row = Any[clean_case]
         for m in methods
             for field in subs[m]
-                push!(row, get(opf_results[case][m], field, missing))
+                val = get(opf_results[case][m], field, missing)
+                push!(row, format_val(field, val))
             end
         end
         push!(rows, row)
     end
 
-    table_data = permutedims(reduce(hcat, rows))   # n_cases × n_cols matrix
+    table_data = permutedims(reduce(hcat, rows))  # n_cases × n_cols matrix
 
     nrows = length(rows)
     hlines = vcat(0, 1, collect(6:5:nrows), nrows+1)
 
-    # two‑level header: top = method name, bottom = metric name
     h_top    = ["Case"]
     h_bottom = [""]
 
     for m in methods
-        n = length(subs[m])                   # how many sub‑columns
-        push!(h_top, string(m))               # first column in the span
-        append!(h_top, fill("", n-1))    # placeholders for the rest
-        append!(h_bottom, string.(subs[m]))   # the sub‑headers themselves
+        n = length(subs[m])
+        push!(h_top, string(m))
+        append!(h_top, fill("", n-1))
+        append!(h_bottom, string.(subs[m]))
+    end
+
+    function group_boundaries(methods, subs)
+        idx = Int[0, 1]
+        col = 1
+        for m in methods
+            col += length(subs[m])
+            push!(idx, col)
+        end
+        return idx
     end
 
     vlines = group_boundaries(methods, subs)
 
-    # ————————————————————————————————————————————————————————————
-    #  Write the .tex file
-    # ————————————————————————————————————————————————————————————
     open(filename, "w") do io
         pretty_table(
             io, table_data;
             header = (h_top, h_bottom),
             backend = Val(:latex),
-            tf = tf_latex_default,   # ⟹ booktabs rules
-            alignment = :c,           # left align everything
-            vlines   = vlines,
-            hlines   = hlines 
+            tf = tf_latex_default,
+            alignment = :c,
+            vlines = vlines,
+            hlines = hlines
         )
     end
 end
 
-function solve_static_cases(cases, tol)
+function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf.tex")
+
+    # --- Sort cases by number ---
+    cases = sort(
+        [c for c in keys(mpopf_results) if c != :tol],
+        by = x -> parse(Int, match(r"\d+", x).match)
+    )
+
+    # --- Build dynamic method names ---
+    methods = String[]
+    for curve in curve_names
+        push!(methods, "GPU $coords $curve")
+        push!(methods, "CPU $coords $curve")
+    end
+
+    # --- Define what fields each method has ---
+    subs = Dict{String, Vector{Symbol}}()
+    for method in methods
+        if startswith(method, "GPU")
+            subs[method] = [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio]
+        elseif startswith(method, "CPU")
+            subs[method] = [:iter, :soltime, :adtime, :termination, :obj, :cvio]
+        end
+    end
+
+    # --- Format values ---
+    format_val(field, val) =
+        (val === missing || val === nothing) ? missing :
+        !(val isa Number) ? string(val) :
+        field == :iter ? string(Int(round(val))) :
+        field in [:obj, :cvio] ? @sprintf("%.6e", val) :
+        @sprintf("%.3e", round(val, sigdigits=4))
+
+    # --- Construct rows ---
+    rows = Any[]
+    for case in cases
+        clean_case = replace(case, r"^pglib_opf_case" => "", r"\.m$" => "")
+        row = Any[clean_case]
+        for m in methods
+            for field in subs[m]
+                val = get(mpopf_results[case][m], field, missing)
+                push!(row, format_val(field, val))
+            end
+        end
+        push!(rows, row)
+    end
+
+    table_data = permutedims(reduce(hcat, rows))
+
+    # --- Header construction ---
+    h_top    = ["Case"]
+    h_bottom = [""]
+
+    for m in methods
+        n = length(subs[m])
+        push!(h_top, m)
+        append!(h_top, fill("", n-1))
+        append!(h_bottom, string.(subs[m]))
+    end
+
+    # --- Group boundary vlines ---
+    function group_boundaries(methods, subs)
+        idx = Int[0, 1]  # vertical lines at case label and after header
+        col = 1
+        for m in methods
+            col += length(subs[m])
+            push!(idx, col)
+        end
+        return idx
+    end
+
+    vlines = group_boundaries(methods, subs)
+
+    # --- Horizontal rules every 5 rows ---
+    nrows = length(rows)
+    hlines = vcat(0, 1, collect(6:5:nrows), nrows+1)
+
+    # --- Output LaTeX ---
+    open(filename, "w") do io
+        pretty_table(
+            io, table_data;
+            header = (h_top, h_bottom),
+            backend = Val(:latex),
+            tf = tf_latex_default,
+            alignment = :c,
+            vlines = vlines,
+            hlines = hlines
+        )
+    end
+end
+
+
+
+function solve_static_cases(cases, tol, coords)
 
     max_wall_time = Float64(900)
 
+    if coords == "Polar"
+        form = :polar
+    elseif coords == "Rectangular"
+        form = :rect
+    else
+        error("Wrong coords")
+    end
+
     #Compile time on smallest case
-    model_gpu, ~ = opf_model("pglib_opf_case3_lmbd"; backend = CUDABackend())
-    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
-    model_gpu, ~ = opf_model("pglib_opf_case3_lmbd"; form = :rect, backend = CUDABackend())
+    model_gpu, ~ = opf_model("pglib_opf_case3_lmbd"; backend = CUDABackend(), form=form)
     ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
 
-    model_cpu, ~ = opf_model("pglib_opf_case3_lmbd";)
+    model_cpu, ~ = opf_model("pglib_opf_case3_lmbd"; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-    model_cpu, ~ = opf_model("pglib_opf_case3_lmbd"; form = :rect)
-    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-
+ 
     opf_results = Dict()
 
     opf_results[:tol]=tol
@@ -234,72 +332,122 @@ function solve_static_cases(cases, tol)
     for case in cases
         case_result = Dict()
 
-        #GPU, Polar
-        m_gpu, v_gpu, c_gpu = opf_model(case; backend = CUDABackend())   
+        #GPU 
+        m_gpu, v_gpu, c_gpu = opf_model(case; backend = CUDABackend(), form=form)   
         result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
 
         c = evaluate(m_gpu, result_gpu)
 
-        case_result[:gpu_polar] = Dict()
-        case_result[:gpu_polar][:iter] = result_gpu.counters.k
-        case_result[:gpu_polar][:soltime] = result_gpu.counters.total_time
-        case_result[:gpu_polar][:inittime] = result_gpu.counters.init_time
-        case_result[:gpu_polar][:adtime] = result_gpu.counters.eval_function_time
-        case_result[:gpu_polar][:lintime] = result_gpu.counters.linear_solver_time
-        case_result[:gpu_polar][:termination] = termination_code(result_gpu.status)
-        case_result[:gpu_polar][:obj] = result_gpu.objective
-        case_result[:gpu_polar][:cvio] = c
+        case_result["GPU " * coords] = Dict()
+        case_result["GPU " * coords][:iter] = result_gpu.counters.k
+        case_result["GPU " * coords][:soltime] = result_gpu.counters.total_time
+        case_result["GPU " * coords][:inittime] = result_gpu.counters.init_time
+        case_result["GPU " * coords][:adtime] = result_gpu.counters.eval_function_time
+        case_result["GPU " * coords][:lintime] = result_gpu.counters.linear_solver_time
+        case_result["GPU " * coords][:termination] = termination_code(result_gpu.status)
+        case_result["GPU " * coords][:obj] = result_gpu.objective
+        case_result["GPU " * coords][:cvio] = c
 
-        #GPU, Rectangular
-        m_gpu, v_gpu, c_gpu = opf_model(case; backend = CUDABackend(), form=:rect)   
-        result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        
-        c = evaluate(m_gpu, result_gpu)
-
-        case_result[:gpu_rect] = Dict()
-        case_result[:gpu_rect][:iter] = result_gpu.counters.k
-        case_result[:gpu_rect][:soltime] = result_gpu.counters.total_time
-        case_result[:gpu_rect][:inittime] = result_gpu.counters.init_time
-        case_result[:gpu_rect][:adtime] = result_gpu.counters.eval_function_time
-        case_result[:gpu_rect][:lintime] = result_gpu.counters.linear_solver_time
-        case_result[:gpu_rect][:termination] = termination_code(result_gpu.status)
-        case_result[:gpu_rect][:obj] = result_gpu.objective
-        case_result[:gpu_rect][:cvio] = c
-
-        #CPU, Polar
-        m_cpu, v_cpu, c_cpu = opf_model(case)
+        #CPU
+        m_cpu, v_cpu, c_cpu = opf_model(case; form=form)
         result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
 
         it, tot, ad = ipopt_stats("ipopt_output")
 
         c = evaluate(m_cpu, result_cpu)
-        case_result[:cpu_polar] = Dict()
-        case_result[:cpu_polar][:iter] = it
-        case_result[:cpu_polar][:soltime] = tot
-        case_result[:cpu_polar][:adtime] = ad
-        case_result[:cpu_polar][:termination] = termination_code(result_cpu.solver_specific[:internal_msg])
-        case_result[:cpu_polar][:obj] = result_cpu.objective
-        case_result[:cpu_polar][:cvio] = c
-
-        #CPU, Rectangular
-        m_cpu, v_cpu, c_cpu = opf_model(case; form = :rect)
-        result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
-
-        it, tot, ad = ipopt_stats("ipopt_output")
-
-        c = evaluate(m_cpu, result_cpu)
-        case_result[:cpu_rect] = Dict()
-        case_result[:cpu_rect][:iter] = it
-        case_result[:cpu_rect][:soltime] = tot
-        case_result[:cpu_rect][:adtime] = ad
-        case_result[:cpu_rect][:termination] = termination_code(result_cpu.solver_specific[:internal_msg])
-        case_result[:cpu_rect][:obj] = result_cpu.objective
-        case_result[:cpu_rect][:cvio] = c
+        case_result["CPU " * coords] = Dict()
+        case_result["CPU " * coords][:iter] = it
+        case_result["CPU " * coords][:soltime] = tot
+        case_result["CPU " * coords][:adtime] = ad
+        case_result["CPU " * coords][:termination] = termination_code(result_cpu.solver_specific[:internal_msg])
+        case_result["CPU " * coords][:obj] = result_cpu.objective
+        case_result["CPU " * coords][:cvio] = c
 
         opf_results[case] = case_result
     end
     
-    generate_tex(opf_results; filename = "benchmark_results.tex")
+    generate_tex_opf(opf_results, coords; filename = "benchmark_results_opf.tex")
 
     return opf_results
 end
+
+curves = Dict("Default" => [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 1.0, .99, 1.0, 1.0,
+    .97, .96, .96, .93, .92, .92, .93, .87, .72, .64],
+    "Gentle" => [.88, .90, .88, .86, .87, .88, .9, .92, .93, .95, .97, 1.0, .99, 1.0, 1.0,
+    .97, .96, .96, .93, .92, .92, .93, .89, .85, .82],
+    "Overburdened" => [.64, .60, .58, .56, .56, .58, .64, .76, .87, .99, 1.03, 1.06, 1.02, 1.10, 1.12,
+    1.04, .99, .96, .93, .92, .92, .93, .87, .72, .64])
+
+
+function solve_mp_cases(cases, curves, tol, coords)
+
+    max_wall_time = Float64(900)
+
+    if coords == "Polar"
+        form = :polar
+    elseif coords == "Rectangular"
+        form = :rect
+    else
+        error("Wrong coords")
+    end
+
+    #Compile time on smallest case
+    model_gpu, ~ = mpopf_model("pglib_opf_case3_lmbd", [1,1,1]; backend = CUDABackend(), form=form)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+
+    model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd", [1,1,1]; form=form)
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
+
+    mpopf_results = Dict()
+
+    mpopf_results[:tol]=tol
+
+    for case in cases
+        case_result = Dict()
+        for (curve_name, curve) in curves            
+
+            #GPU
+            m_gpu, v_gpu, c_gpu = opf_model(case; backend = CUDABackend(), form=form)   
+            result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+
+            c = evaluate(m_gpu, result_gpu)
+
+            case_result["GPU " * coords * " " *curve_name] = Dict()
+            case_result["GPU " * coords * " " *curve_name][:iter] = result_gpu.counters.k
+            case_result["GPU " * coords * " " *curve_name][:soltime] = result_gpu.counters.total_time
+            case_result["GPU " * coords * " " *curve_name][:inittime] = result_gpu.counters.init_time
+            case_result["GPU " * coords * " " *curve_name][:adtime] = result_gpu.counters.eval_function_time
+            case_result["GPU " * coords * " " *curve_name][:lintime] = result_gpu.counters.linear_solver_time
+            case_result["GPU " * coords * " " *curve_name][:termination] = termination_code(result_gpu.status)
+            case_result["GPU " * coords * " " *curve_name][:obj] = result_gpu.objective
+            case_result["GPU " * coords * " " *curve_name][:cvio] = c
+
+            #CPU
+            m_cpu, v_cpu, c_cpu = opf_model(case; form = :rect)
+            result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+
+            it, tot, ad = ipopt_stats("ipopt_output")
+
+            c = evaluate(m_cpu, result_cpu)
+            case_result["CPU " * coords * " " *curve_name] = Dict()
+            case_result["CPU " * coords * " " *curve_name][:iter] = it
+            case_result["CPU " * coords * " " *curve_name][:soltime] = tot
+            case_result["CPU " * coords * " " *curve_name][:adtime] = ad
+            case_result["CPU " * coords * " " *curve_name][:termination] = termination_code(result_cpu.solver_specific[:internal_msg])
+            case_result["CPU " * coords * " " *curve_name][:obj] = result_cpu.objective
+            case_result["CPU " * coords * " " *curve_name][:cvio] = c
+
+            println(case_result)
+
+            
+        end
+
+        mpopf_results[case] = case_result
+    end
+
+    curve_names = collect(keys(curves))
+    
+    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf.tex")
+    return mpopf_results
+end
+
