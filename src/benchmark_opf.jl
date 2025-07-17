@@ -15,8 +15,8 @@ cases = [
 "pglib_opf_case30_ieee.m",
 "pglib_opf_case39_epri.m",
 "pglib_opf_case57_ieee.m",
-"pglib_opf_case60_c.m",
-"pglib_opf_case73_ieee_rts.m",
+"pglib_opf_case60_c.m",]
+#="pglib_opf_case73_ieee_rts.m",
 "pglib_opf_case89_pegase.m",
 "pglib_opf_case118_ieee.m",
 "pglib_opf_case162_ieee_dtc.m",
@@ -29,8 +29,7 @@ cases = [
 "pglib_opf_case588_sdet.m",
 "pglib_opf_case793_goc.m",
 "pglib_opf_case1354_pegase.m",
-"pglib_opf_case10192_epigrids.m"]
-#="pglib_opf_case1803_snem.m",
+"pglib_opf_case1803_snem.m",
 "pglib_opf_case1888_rte.m",
 "pglib_opf_case1951_rte.m",
 "pglib_opf_case2000_goc.m",
@@ -159,11 +158,17 @@ function generate_tex_opf(opf_results, coords; filename="benchmark_results_opf.t
     field in [:obj, :cvio] ? @sprintf("%.6e", val) :
     @sprintf("%.3e", round(val, sigdigits=4))
 
+    format_k(val) = isnothing(val) || val === missing ? missing : @sprintf("%.1fk", val / 1000)
+
 
     rows = Any[]
     for case in cases
         clean_case = replace(case, r"^pglib_opf_case" => "", r"\.m$" => "")
-        row = Any[clean_case]
+
+        case_data = opf_results[case]
+        nvar = format_k(get(case_data, "nvar", missing))
+        ncon = format_k(get(case_data, "ncon", missing))
+        row = Any[clean_case, nvar, ncon]
         for m in methods
             for field in subs[m]
                 val = get(opf_results[case][m], field, missing)
@@ -178,8 +183,8 @@ function generate_tex_opf(opf_results, coords; filename="benchmark_results_opf.t
     nrows = length(rows)
     hlines = vcat(0, 1, collect(6:5:nrows), nrows+1)
 
-    h_top    = ["Case"]
-    h_bottom = [""]
+    h_top    = ["Case", "nvars", "ncons"]
+    h_bottom = ["",     "",      ""]
 
     for m in methods
         n = length(subs[m])
@@ -189,8 +194,8 @@ function generate_tex_opf(opf_results, coords; filename="benchmark_results_opf.t
     end
 
     function group_boundaries(methods, subs)
-        idx = Int[0, 1]
-        col = 1
+        idx = Int[0, 1, 2, 3]
+        col = 3
         for m in methods
             col += length(subs[m])
             push!(idx, col)
@@ -246,11 +251,18 @@ function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchm
         field in [:obj, :cvio] ? @sprintf("%.6e", val) :
         @sprintf("%.3e", round(val, sigdigits=4))
 
+    format_k(val) = isnothing(val) || val === missing ? missing : @sprintf("%.1fk", val / 1000)
+
     # --- Construct rows ---
     rows = Any[]
     for case in cases
         clean_case = replace(case, r"^pglib_opf_case" => "", r"\.m$" => "")
-        row = Any[clean_case]
+
+        case_data = mpopf_results[case]
+        nvar = format_k(get(case_data, "nvar", missing))
+        ncon = format_k(get(case_data, "ncon", missing))
+        row = Any[clean_case, nvar, ncon]
+
         for m in methods
             for field in subs[m]
                 val = get(mpopf_results[case][m], field, missing)
@@ -263,8 +275,8 @@ function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchm
     table_data = permutedims(reduce(hcat, rows))
 
     # --- Header construction ---
-    h_top    = ["Case"]
-    h_bottom = [""]
+    h_top    = ["Case", "nvars", "ncons"]
+    h_bottom = ["",     "",      ""]
 
     for m in methods
         n = length(subs[m])
@@ -275,8 +287,8 @@ function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchm
 
     # --- Group boundary vlines ---
     function group_boundaries(methods, subs)
-        idx = Int[0, 1]  # vertical lines at case label and after header
-        col = 1
+        idx = Int[0, 1, 2, 3]  # vertical lines at case label and after header
+        col = 3
         for m in methods
             col += length(subs[m])
             push!(idx, col)
@@ -338,6 +350,9 @@ function solve_static_cases(cases, tol, coords)
 
         c = evaluate(m_gpu, result_gpu)
 
+        case_result["nvar"] = m_gpu.meta.nvar
+        case_result["ncon"] = m_gpu.meta.ncon
+
         case_result["GPU " * coords] = Dict()
         case_result["GPU " * coords][:iter] = result_gpu.counters.k
         case_result["GPU " * coords][:soltime] = result_gpu.counters.total_time
@@ -371,12 +386,12 @@ function solve_static_cases(cases, tol, coords)
     return opf_results
 end
 
-curves = Dict("Default" => [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 1.0, .99, 1.0, 1.0,
-    .97, .96, .96, .93, .92, .92, .93, .87, .72, .64],
+curves = Dict("Default" => [.64, .60, .58, .56, .58, .62, .66, .73, .81, .88, .95, 1.0, .99, 1.0, 1.0,
+    .97, .96, .96, .93, .92, .92, .93, .87, .78, .7],
     "Gentle" => [.88, .90, .88, .86, .87, .88, .9, .92, .93, .95, .97, 1.0, .99, 1.0, 1.0,
     .97, .96, .96, .93, .92, .92, .93, .89, .85, .82],
-    "Overburdened" => [.64, .60, .58, .56, .56, .58, .64, .76, .87, .99, 1.03, 1.06, 1.02, 1.10, 1.12,
-    1.04, .99, .96, .93, .92, .92, .93, .87, .72, .64])
+    "Overburdened" => [.64, .60, .58, .56, .6, .63, .7, .76, .84, .92, .97, 1.01, 1.03, 1.04, 1.06,
+    1.08, 1.05, .98, .93, .92, .92, .93, .87, .8, .73])
 
 
 function solve_mp_cases(cases, curves, tol, coords)
@@ -403,14 +418,19 @@ function solve_mp_cases(cases, curves, tol, coords)
     mpopf_results[:tol]=tol
 
     for case in cases
+        println(case)
         case_result = Dict()
         for (curve_name, curve) in curves            
 
             #GPU
-            m_gpu, v_gpu, c_gpu = opf_model(case; backend = CUDABackend(), form=form)   
+            m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form)   
             result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
 
+            case_result["nvar"] = m_gpu.meta.nvar
+            case_result["ncon"] = m_gpu.meta.ncon
+
             c = evaluate(m_gpu, result_gpu)
+            
 
             case_result["GPU " * coords * " " *curve_name] = Dict()
             case_result["GPU " * coords * " " *curve_name][:iter] = result_gpu.counters.k
@@ -423,7 +443,7 @@ function solve_mp_cases(cases, curves, tol, coords)
             case_result["GPU " * coords * " " *curve_name][:cvio] = c
 
             #CPU
-            m_cpu, v_cpu, c_cpu = opf_model(case; form = :rect)
+            m_cpu, v_cpu, c_cpu = mpopf_model(case, curve; form = :rect)
             result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
 
             it, tot, ad = ipopt_stats("ipopt_output")
@@ -437,7 +457,6 @@ function solve_mp_cases(cases, curves, tol, coords)
             case_result["CPU " * coords * " " *curve_name][:obj] = result_cpu.objective
             case_result["CPU " * coords * " " *curve_name][:cvio] = c
 
-            println(case_result)
 
             
         end
