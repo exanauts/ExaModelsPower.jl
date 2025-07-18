@@ -1,78 +1,80 @@
 
-using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra
+using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra, CSV, DataFrames, PrettyTables, Printf
+using PrettyTables: tf_latex_booktabs, LatexTableFormat
+
 
 cases = [
-"pglib_opf_case3_lmbd.m",
-"pglib_opf_case5_pjm.m", 
-"pglib_opf_case14_ieee.m", 
-"pglib_opf_case24_ieee_rts.m", 
-"pglib_opf_case30_as.m", 
-"pglib_opf_case30_ieee.m", 
-"pglib_opf_case5_pjm.m",
-"pglib_opf_case14_ieee.m",
-"pglib_opf_case24_ieee_rts.m",
-"pglib_opf_case30_as.m",
-"pglib_opf_case30_ieee.m",
-"pglib_opf_case39_epri.m",
-"pglib_opf_case57_ieee.m",
-"pglib_opf_case60_c.m",]
-#="pglib_opf_case73_ieee_rts.m",
-"pglib_opf_case89_pegase.m",
-"pglib_opf_case118_ieee.m",
-"pglib_opf_case162_ieee_dtc.m",
-"pglib_opf_case179_goc.m",
-"pglib_opf_case197_snem.m",
-"pglib_opf_case200_activ.m",
-"pglib_opf_case240_pserc.m",
-"pglib_opf_case300_ieee.m",
-"pglib_opf_case500_goc.m",
-"pglib_opf_case588_sdet.m",
-"pglib_opf_case793_goc.m",
-"pglib_opf_case1354_pegase.m",
-"pglib_opf_case1803_snem.m",
-"pglib_opf_case1888_rte.m",
-"pglib_opf_case1951_rte.m",
-"pglib_opf_case2000_goc.m",
-"pglib_opf_case2312_goc.m",
-"pglib_opf_case2383wp_k.m",
-"pglib_opf_case2736sp_k.m",
-"pglib_opf_case2737sop_k.m",
-"pglib_opf_case2742_goc.m",
-"pglib_opf_case2746wop_k.m",
-"pglib_opf_case2746wp_k.m",
-"pglib_opf_case2848_rte.m",
-"pglib_opf_case2853_sdet.m",
-"pglib_opf_case2868_rte.m",
-"pglib_opf_case2869_pegase.m",
-"pglib_opf_case3012wp_k.m",
-"pglib_opf_case3022_goc.m",
-"pglib_opf_case3120sp_k.m",
-"pglib_opf_case3375wp_k.m",
-"pglib_opf_case3970_goc.m",
-"pglib_opf_case4020_goc.m",
-"pglib_opf_case4601_goc.m",
-"pglib_opf_case4619_goc.m",
-"pglib_opf_case4661_sdet.m",
-"pglib_opf_case4837_goc.m",
-"pglib_opf_case4917_goc.m",
-"pglib_opf_case5658_epigrids.m",
-"pglib_opf_case6468_rte.m",
-"pglib_opf_case6470_rte.m",
-"pglib_opf_case6495_rte.m",
-"pglib_opf_case6515_rte.m",
-"pglib_opf_case7336_epigrids.m",
-"pglib_opf_case8387_pegase.m",
-"pglib_opf_case9241_pegase.m",
-"pglib_opf_case9591_goc.m",
-"pglib_opf_case10000_goc.m",
-"pglib_opf_case10192_epigrids.m",
-"pglib_opf_case10480_goc.m",
-"pglib_opf_case13659_pegase.m",
-"pglib_opf_case19402_goc.m",
-"pglib_opf_case20758_epigrids.m",
-"pglib_opf_case24464_goc.m",
-"pglib_opf_case30000_goc.m",
-"pglib_opf_case78484_epigrids.m",]=#
+"pglib_opf_case3_lmbd",
+"pglib_opf_case5_pjm", 
+"pglib_opf_case14_ieee", 
+"pglib_opf_case24_ieee_rts", 
+"pglib_opf_case30_as", 
+"pglib_opf_case30_ieee", 
+"pglib_opf_case5_pjm",
+"pglib_opf_case14_ieee",
+"pglib_opf_case24_ieee_rts",
+"pglib_opf_case30_as",
+"pglib_opf_case30_ieee",
+"pglib_opf_case39_epri",
+"pglib_opf_case57_ieee",
+"pglib_opf_case60_c",]
+#="pglib_opf_case73_ieee_rts",
+"pglib_opf_case89_pegase",
+"pglib_opf_case118_ieee",
+"pglib_opf_case162_ieee_dtc",
+"pglib_opf_case179_goc",
+"pglib_opf_case197_snem",
+"pglib_opf_case200_activ",
+"pglib_opf_case240_pserc",
+"pglib_opf_case300_ieee",
+"pglib_opf_case500_goc",
+"pglib_opf_case588_sdet",
+"pglib_opf_case793_goc",
+"pglib_opf_case1354_pegase",
+"pglib_opf_case1803_snem",
+"pglib_opf_case1888_rte",
+"pglib_opf_case1951_rte",
+"pglib_opf_case2000_goc",
+"pglib_opf_case2312_goc",
+"pglib_opf_case2383wp_k",
+"pglib_opf_case2736sp_k",
+"pglib_opf_case2737sop_k",
+"pglib_opf_case2742_goc",
+"pglib_opf_case2746wop_k",
+"pglib_opf_case2746wp_k",
+"pglib_opf_case2848_rte",
+"pglib_opf_case2853_sdet",
+"pglib_opf_case2868_rte",
+"pglib_opf_case2869_pegase",
+"pglib_opf_case3012wp_k",
+"pglib_opf_case3022_goc",
+"pglib_opf_case3120sp_k",
+"pglib_opf_case3375wp_k",
+"pglib_opf_case3970_goc",
+"pglib_opf_case4020_goc",
+"pglib_opf_case4601_goc",
+"pglib_opf_case4619_goc",
+"pglib_opf_case4661_sdet",
+"pglib_opf_case4837_goc",
+"pglib_opf_case4917_goc",
+"pglib_opf_case5658_epigrids",
+"pglib_opf_case6468_rte",
+"pglib_opf_case6470_rte",
+"pglib_opf_case6495_rte",
+"pglib_opf_case6515_rte",
+"pglib_opf_case7336_epigrids",
+"pglib_opf_case8387_pegase",
+"pglib_opf_case9241_pegase",
+"pglib_opf_case9591_goc",
+"pglib_opf_case10000_goc",
+"pglib_opf_case10192_epigrids",
+"pglib_opf_case10480_goc",
+"pglib_opf_case13659_pegase",
+"pglib_opf_case19402_goc",
+"pglib_opf_case20758_epigrids",
+"pglib_opf_case24464_goc",
+"pglib_opf_case30000_goc",
+"pglib_opf_case78484_epigrids",]=#
 
 function termination_code(status::MadNLP.Status)
     if status == MadNLP.SOLVE_SUCCEEDED
@@ -118,8 +120,6 @@ function ipopt_stats(fname)
     return iter, tot, ad
 end
 
-using PrettyTables, Printf                # at the top of the file
-using PrettyTables: tf_latex_booktabs, LatexTableFormat
 
 # after you assemble `methods` and `subs`
 function group_boundaries(methods, subs)
@@ -162,20 +162,29 @@ function generate_tex_opf(opf_results, coords; filename="benchmark_results_opf.t
 
 
     rows = Any[]
+    raw_rows = Any[]
     for case in cases
-        clean_case = replace(case, r"^pglib_opf_case" => "", r"\.m$" => "")
+        clean_case = replace(case,
+            r"^(api/|sad/)" => "",             
+            r"pglib_opf_case" => "",           
+            r"\.m$" => ""                      
+        )
+
 
         case_data = opf_results[case]
-        nvar = format_k(get(case_data, "nvar", missing))
-        ncon = format_k(get(case_data, "ncon", missing))
-        row = Any[clean_case, nvar, ncon]
+        nvar = get(case_data, "nvar", missing)
+        ncon = get(case_data, "ncon", missing)
+        row = Any[clean_case, format_k(nvar), format_k(ncon)]
+        raw_row = Any[clean_case, nvar, ncon]
         for m in methods
             for field in subs[m]
                 val = get(opf_results[case][m], field, missing)
                 push!(row, format_val(field, val))
+                push!(raw_row, val)
             end
         end
         push!(rows, row)
+        push!(raw_rows, raw_row)
     end
 
     table_data = permutedims(reduce(hcat, rows))  # n_cases × n_cols matrix
@@ -216,6 +225,25 @@ function generate_tex_opf(opf_results, coords; filename="benchmark_results_opf.t
             hlines = hlines
         )
     end
+
+    # Write plain-text version (filename.txt)
+    txt_filename = replace(filename, r"\.tex$" => ".txt")
+    open(txt_filename, "w") do io
+        pretty_table(
+            io, table_data;
+            header = (h_top, h_bottom),
+            backend = Val(:text),
+            alignment = :c
+        )
+    end
+
+    # Write CSV version (raw values)
+    csv_filename = replace(filename, r"\.tex$" => ".csv")
+    flat_header = vcat(["Case", "nvars", "ncons"], vcat([
+        string(m, "_", f) for m in methods for f in subs[m]
+    ]))
+    df = DataFrame([Symbol(h) => col for (h, col) in zip(flat_header, eachcol(permutedims(reduce(hcat, raw_rows))))])
+    CSV.write(csv_filename, df)
 end
 
 function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf.tex")
@@ -255,21 +283,24 @@ function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchm
 
     # --- Construct rows ---
     rows = Any[]
+    raw_rows = Any[]
     for case in cases
         clean_case = replace(case, r"^pglib_opf_case" => "", r"\.m$" => "")
 
         case_data = mpopf_results[case]
-        nvar = format_k(get(case_data, "nvar", missing))
-        ncon = format_k(get(case_data, "ncon", missing))
-        row = Any[clean_case, nvar, ncon]
-
+        nvar = get(case_data, "nvar", missing)
+        ncon = get(case_data, "ncon", missing)
+        row = Any[clean_case, format_k(nvar), format_k(ncon)]
+        raw_row = Any[clean_case, nvar, ncon]
         for m in methods
             for field in subs[m]
                 val = get(mpopf_results[case][m], field, missing)
                 push!(row, format_val(field, val))
+                push!(raw_row, val)
             end
         end
         push!(rows, row)
+        push!(raw_rows, raw_row)
     end
 
     table_data = permutedims(reduce(hcat, rows))
@@ -314,11 +345,30 @@ function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchm
             hlines = hlines
         )
     end
+
+    # Write plain-text version (filename.txt)
+    txt_filename = replace(filename, r"\.tex$" => ".txt")
+    open(txt_filename, "w") do io
+        pretty_table(
+            io, table_data;
+            header = (h_top, h_bottom),
+            backend = Val(:text),
+            alignment = :c
+        )
+    end
+
+    # Write CSV version (raw values)
+    csv_filename = replace(filename, r"\.tex$" => ".csv")
+    flat_header = vcat(["Case", "nvars", "ncons"], vcat([
+        string(m, "_", f) for m in methods for f in subs[m]
+    ]))
+    df = DataFrame([Symbol(h) => col for (h, col) in zip(flat_header, eachcol(permutedims(reduce(hcat, raw_rows))))])
+    CSV.write(csv_filename, df)
 end
 
 
 
-function solve_static_cases(cases, tol, coords)
+function solve_static_cases(cases, tol, coords; case_style = "default")
 
     max_wall_time = Float64(900)
 
@@ -343,6 +393,17 @@ function solve_static_cases(cases, tol, coords)
 
     for case in cases
         case_result = Dict()
+
+        if case_style == "default"
+            case = case*".m"
+        elseif case_style == "api"
+            case = "api/"*case*"__api.m"
+        elseif case_style == "sad"
+            case = "sad/"*case*"__sad.m"
+        else
+            error("Invalid case style")
+        end
+
 
         #GPU 
         m_gpu, v_gpu, c_gpu = opf_model(case; backend = CUDABackend(), form=form)   
@@ -381,17 +442,17 @@ function solve_static_cases(cases, tol, coords)
         opf_results[case] = case_result
     end
     
-    generate_tex_opf(opf_results, coords; filename = "benchmark_results_opf.tex")
+    generate_tex_opf(opf_results, coords; filename = "benchmark_results_opf_" * case_style * "_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
 
     return opf_results
 end
 
-curves = Dict("Default" => [.64, .60, .58, .56, .58, .62, .66, .73, .81, .88, .95, 1.0, .99, 1.0, 1.0,
-    .97, .96, .96, .93, .92, .92, .93, .87, .78, .7],
+curves = Dict("Default" => [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 1.0, .99, 1.0, 1.0,
+    .97, .96, .96, .93, .92, .92, .93, .87, .72, .64],
     "Gentle" => [.88, .90, .88, .86, .87, .88, .9, .92, .93, .95, .97, 1.0, .99, 1.0, 1.0,
     .97, .96, .96, .93, .92, .92, .93, .89, .85, .82],
-    "Overburdened" => [.64, .60, .58, .56, .6, .63, .7, .76, .84, .92, .97, 1.01, 1.03, 1.04, 1.06,
-    1.08, 1.05, .98, .93, .92, .92, .93, .87, .8, .73])
+    "Aggressive" => [.52, .60, .53, .59, .51, .62, .65, .76, .87, .95, .99, 1.01, .99, 1.0, 1.02,
+    .92, 1.0, .9, .93, .84, .92, .93, .85, .73, .62])
 
 
 function solve_mp_cases(cases, curves, tol, coords)
@@ -466,7 +527,7 @@ function solve_mp_cases(cases, curves, tol, coords)
 
     curve_names = collect(keys(curves))
     
-    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf.tex")
+    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_opf_" * "tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
     return mpopf_results
 end
 
