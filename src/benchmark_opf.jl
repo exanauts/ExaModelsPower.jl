@@ -1,5 +1,5 @@
 
-using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra, CSV, DataFrames, PrettyTables, Printf
+using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra, CSV, DataFrames, PrettyTables, Printf, Plots, SolverBenchmark
 using PrettyTables: tf_latex_booktabs, LatexTableFormat
 
 
@@ -247,11 +247,57 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     df = DataFrame([Symbol(h) => col for (h, col) in zip(flat_header, eachcol(permutedims(reduce(hcat, raw_rows))))])
     CSV.write(csv_filename, df)
 
-    #Make chart
+    # Full comparison
     selected = Dict(k => opf_results[k] for k in [:gpu, :cpu])
     p = performance_profile(selected, df -> df.soltime)
     Plots.svg(p, replace(filename, r"\.tex$" => ""))
 
+    small_list = Int64[]
+    med_list= Int64[]
+    large_list = Int64[]
+
+    for (i, row) in enumerate(eachrow(opf_results[:top]))
+        if row.nvar <= 2000
+            push!(small_list, i)
+        elseif row.nvar <= 20000
+            push!(med_list, i)
+        else
+            push!(large_list, i)
+        end
+    end
+    
+    # Small: nvar < 2000
+    selected = Dict(
+        k => filter(row -> row.id in small_list, v)
+        for (k, v) in opf_results
+        if k in [:gpu, :cpu]
+    )
+    if !isempty(selected)
+        p = performance_profile(selected, df -> df.soltime)
+        Plots.svg(p, replace(filename, r"\.tex$" => "_small"))
+    end
+
+    # Medium: 2000 ≤ nvar ≤ 20000
+    selected = Dict(
+        k => filter(row -> row.id in med_list, v)
+        for (k, v) in opf_results
+        if k in [:gpu, :cpu]
+    )
+    if !isempty(selected)
+        p = performance_profile(selected, df -> df.soltime)
+        Plots.svg(p, replace(filename, r"\.tex$" => "_medium"))
+    end
+
+    # Large: nvar > 20000
+    selected = Dict(
+        k => filter(row -> row.id in large_list, v)
+        for (k, v) in opf_results
+        if k in [:gpu, :cpu]
+    )
+    if !isempty(selected)
+        p = performance_profile(selected, df -> df.soltime)
+        Plots.svg(p, replace(filename, r"\.tex$" => "_large"))
+    end
 
 end
 
@@ -522,9 +568,9 @@ curves = Dict("easy" => [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 
     .92, 1.0, .9, .93, .84, .92, .93, .85, .73, .62])
 
 
-function solve_mp_cases(cases, curves, tol, coords)
+function solve_mp_cases(cases, curves, tol, coords; case_style = "default")
 
-    max_wall_time = Float64(900)
+    max_wall_time = Float64(2500)
 
     if coords == "Polar"
         form = :polar
@@ -556,7 +602,15 @@ function solve_mp_cases(cases, curves, tol, coords)
 
 
     for (i, case) in enumerate(cases)
-        case = case*".m"
+        if case_style == "default"
+            case = case*".m"
+        elseif case_style == "api"
+            case = "api/"*case*"__api.m"
+        elseif case_style == "sad"
+            case = "sad/"*case*"__sad.m"
+        else
+            error("Invalid case style")
+        end
         for (curve_name, curve) in curves            
 
             #GPU
@@ -605,7 +659,7 @@ function solve_mp_cases(cases, curves, tol, coords)
                 :cpu_medium => df_cpu_medium,
                 :cpu_hard => df_cpu_hard,)
     
-    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * "tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
     return mpopf_results
 end
 
