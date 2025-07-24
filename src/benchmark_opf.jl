@@ -1,5 +1,5 @@
 
-using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra, CSV, DataFrames, PrettyTables, Printf, Plots, SolverBenchmark
+using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra, CSV, DataFrames, PrettyTables, Printf, Plots, SolverBenchmark, MadNCL, HybridKKT
 using PrettyTables: tf_latex_booktabs, LatexTableFormat
 
 
@@ -272,7 +272,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         for (k, v) in opf_results
         if k in [:gpu, :cpu]
     )
-    if !isempty(selected)
+    if !isempty(selected[:gpu])
         p = performance_profile(selected, df -> df.soltime)
         Plots.svg(p, replace(filename, r"\.tex$" => "_small"))
     end
@@ -283,7 +283,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         for (k, v) in opf_results
         if k in [:gpu, :cpu]
     )
-    if !isempty(selected)
+    if !isempty(selected[:gpu])
         p = performance_profile(selected, df -> df.soltime)
         Plots.svg(p, replace(filename, r"\.tex$" => "_medium"))
     end
@@ -294,7 +294,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         for (k, v) in opf_results
         if k in [:gpu, :cpu]
     )
-    if !isempty(selected)
+    if !isempty(selected[:gpu])
         p = performance_profile(selected, df -> df.soltime)
         Plots.svg(p, replace(filename, r"\.tex$" => "_large"))
     end
@@ -487,6 +487,202 @@ function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchm
 
 end
 
+function generate_tex_stor_comp(stor_results, coords, comp_names; filename="benchmark_results_mpopf_storage.tex")
+
+    df_top = stor_results[:top]
+    df_gpu_no_cmp = stor_results[:gpu_no_cmp]
+    df_gpu_cmp = stor_results[:gpu_cmp]
+    df_gpu_nl_cmp = stor_results[:gpu_nl_cmp]
+    df_cpu_no_cmp = stor_results[:cpu_no_cmp]
+    df_cpu_cmp = stor_results[:cpu_cmp]
+    df_cpu_nl_cmp = stor_results[:cpu_nl_cmp]
+
+    # --- Build dynamic method names ---
+    methods = String[]
+    for comp in comp_names
+        push!(methods, "GPU $coords $comp")
+        push!(methods, "CPU $coords $comp")
+    end
+
+    # --- Define what fields each method has ---
+    subs = Dict{String, Vector{Symbol}}()
+    for method in methods
+        if startswith(method, "GPU")
+            subs[method] = [:nvar, :ncon, :iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio]
+        elseif startswith(method, "CPU")
+            subs[method] = [:iter, :soltime, :adtime, :termination, :obj, :cvio]
+        end
+    end
+
+    # --- Format values ---
+    format_val(field, val) =
+        (val === missing || val === nothing) ? missing :
+        !(val isa Number) ? string(val) :
+        field == :iter ? string(Int(round(val))) :
+        field in [:obj, :cvio] ? @sprintf("%.6e", val) :
+        @sprintf("%.3e", round(val, sigdigits=4))
+
+    format_k(val) = isnothing(val) || val === missing ? missing : @sprintf("%.1fk", val / 1000)
+
+    # --- Construct rows ---
+    rows = Any[]
+    raw_rows = Any[]
+    for (i, row_top) in enumerate(eachrow(df_top))
+        case = row_top.case_name
+        clean_case = replace(case, r"^pglib_opf_case" => "", r"\.m$" => "")
+
+        row = Any[clean_case]#, format_k(row_top.nvar), format_k(row_top.ncon)]
+        raw_row = Any[clean_case]#, row_top.nvar, row_top.ncon]
+
+        #Easy
+        row_gpu_no_cmp = df_gpu_no_cmp[i, :]
+        for field in subs["GPU "*coords*" no cc"]
+            val = get(row_gpu_no_cmp, field, missing)
+            if field in [:nvar, :ncon]
+                push!(row, format_k(val))
+            else
+                push!(row, format_val(field, val))
+            end
+            push!(raw_row, val)
+        end
+
+        row_cpu_no_cmp = df_cpu_no_cmp[i, :]
+        for field in subs["CPU "*coords*" no cc"]
+            val = get(row_cpu_no_cmp, field, missing)
+            push!(row, format_val(field, val))
+            push!(raw_row, val)
+        end
+
+        #Medium
+        row_gpu_cmp = df_gpu_cmp[i, :]
+        for field in subs["GPU "*coords*" no cc"]
+            val = get(row_gpu_cmp, field, missing)
+            if field in [:nvar, :ncon]
+                push!(row, format_k(val))
+            else
+                push!(row, format_val(field, val))
+            end
+            push!(raw_row, val)
+        end
+
+        row_cpu_cmp = df_cpu_cmp[i, :]
+        for field in subs["CPU "*coords*" no cc"]
+            val = get(row_cpu_cmp, field, missing)
+            push!(row, format_val(field, val))
+            push!(raw_row, val)
+        end
+
+        #Hard
+        row_gpu_nl_cmp = df_gpu_nl_cmp[i, :]
+        for field in subs["GPU "*coords*" no cc"]
+            val = get(row_gpu_nl_cmp, field, missing)
+            if field in [:nvar, :ncon]
+                push!(row, format_k(val))
+            else
+                push!(row, format_val(field, val))
+            end
+            push!(raw_row, val)
+        end
+
+        row_cpu_nl_cmp = df_cpu_nl_cmp[i, :]
+        for field in subs["CPU "*coords*" no cc"]
+            val = get(row_cpu_nl_cmp, field, missing)
+            push!(row, format_val(field, val))
+            push!(raw_row, val)
+        end
+
+
+        push!(rows, row)
+        push!(raw_rows, raw_row)
+    end
+
+    table_data = permutedims(reduce(hcat, rows))
+
+    # --- Header construction ---
+    h_top    = ["Case"]
+    h_bottom = [""]
+
+    for m in methods
+        n = length(subs[m])
+        push!(h_top, m)
+        append!(h_top, fill("", n-1))
+        append!(h_bottom, string.(subs[m]))
+    end
+
+    # --- Group boundary vlines ---
+    function group_boundaries(methods, subs)
+        idx = Int[0, 1]  # vertical lines at case label and after header
+        col = 1
+        for m in methods
+            col += length(subs[m])
+            push!(idx, col)
+        end
+        return idx
+    end
+
+    vlines = group_boundaries(methods, subs)
+
+    # --- Horizontal rules every 5 rows ---
+    nrows = length(rows)
+    hlines = vcat(0, 1, collect(6:5:nrows), nrows+1)
+
+    # --- Output LaTeX ---
+    open(filename, "w") do io
+        pretty_table(
+            io, table_data;
+            header = (h_top, h_bottom),
+            backend = Val(:latex),
+            tf = tf_latex_default,
+            alignment = :c,
+            vlines = vlines,
+            hlines = hlines
+        )
+    end
+
+
+    # Write plain-text version (filename.txt)
+    txt_filename = replace(filename, r"\.tex$" => ".txt")
+    open(txt_filename, "w") do io
+        pretty_table(
+            io, table_data;
+            header = (h_top, h_bottom),
+            backend = Val(:text),
+            alignment = :c
+        )
+    end
+
+    # Write CSV version (raw values)
+    csv_filename = replace(filename, r"\.tex$" => ".csv")
+    flat_header = vcat(["Case"], vcat([
+        string(m, "_", f) for m in methods for f in subs[m]
+    ]))
+    df = DataFrame([Symbol(h) => col for (h, col) in zip(flat_header, eachcol(permutedims(reduce(hcat, raw_rows))))])
+    CSV.write(csv_filename, df)
+
+    #Make charts
+    selected = Dict(
+        :gpu_no_cmp => stor_results[:gpu_no_cmp],
+        :cpu_no_cmp => stor_results[:cpu_no_cmp],
+    )
+    p = performance_profile(selected, df -> df.soltime)
+    Plots.svg(p, replace(filename, r"\.tex$" => "_no_cmp"))
+
+    selected = Dict(
+        :gpu_cmp => stor_results[:gpu_cmp],
+        :cpu_cmp => stor_results[:cpu_cmp],
+    )
+    p = performance_profile(selected, df -> df.soltime)
+    Plots.svg(p, replace(filename, r"\.tex$" => "_cmp"))
+
+    selected = Dict(
+        :gpu_nl_cmp => stor_results[:gpu_nl_cmp],
+        :cpu_nl_cmp => stor_results[:cpu_nl_cmp],
+    )
+    p = performance_profile(selected, df -> df.soltime)
+    Plots.svg(p, replace(filename, r"\.tex$" => "_nl_cmp"))
+
+
+end
 
 
 function solve_static_cases(cases, tol, coords; case_style = "default")
@@ -504,10 +700,18 @@ function solve_static_cases(cases, tol, coords; case_style = "default")
     #Compile time on smallest case
     model_gpu, ~ = opf_model("pglib_opf_case3_lmbd"; backend = CUDABackend(), form=form)
     ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = MadNCL.madncl(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true, kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                linear_solver=LapackCPUSolver,
+                lapack_algorithm=MadNLP.CHOLESKY)
 
     model_cpu, ~ = opf_model("pglib_opf_case3_lmbd"; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
- 
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
+
+
+
     df_top = DataFrame(nvar = Int[], ncon = Int[], case_name = String[])
 
     df_gpu = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
@@ -568,9 +772,9 @@ curves = Dict("easy" => [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 
     .92, 1.0, .9, .93, .84, .92, .93, .85, .73, .62])
 
 
-function solve_mp_cases(cases, curves, tol, coords; case_style = "default")
+function solve_mp_cases(cases, curves, tol, coords; case_style = "default", storage = false)
 
-    max_wall_time = Float64(2500)
+    
 
     if coords == "Polar"
         form = :polar
@@ -594,22 +798,41 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default")
 
 
     #Compile time on smallest case
-    model_gpu, ~ = mpopf_model("pglib_opf_case3_lmbd", [1,1,1]; backend = CUDABackend(), form=form)
+    if !storage
+        test_case = "pglib_opf_case3_lmbd"
+        max_wall_time = Float64(2500)
+    else
+        test_case = "pglib_opf_case3_lmbd_storage.m"
+        max_wall_time = Float64(4500)
+    end
+    model_gpu, ~ = mpopf_model(test_case, [1,1,1]; backend = CUDABackend(), form=form)
     ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
 
-    model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd", [1,1,1]; form=form)
+    model_cpu, ~ = mpopf_model(test_case, [1,1,1]; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
 
 
     for (i, case) in enumerate(cases)
-        if case_style == "default"
-            case = case*".m"
-        elseif case_style == "api"
-            case = "api/"*case*"__api.m"
-        elseif case_style == "sad"
-            case = "sad/"*case*"__sad.m"
+        if !storage
+            if case_style == "default"
+                case = case*".m"
+            elseif case_style == "api"
+                case = "api/"*case*"__api.m"
+            elseif case_style == "sad"
+                case = "sad/"*case*"__sad.m"
+            else
+                error("Invalid case style")
+            end
         else
-            error("Invalid case style")
+            if case_style == "default"
+                case = case*"_storage.m"
+            elseif case_style == "api"
+                case = case*"__api_storage.m"
+            elseif case_style == "sad"
+                case = case*"__sad_storage.m"
+            else
+                error("Invalid case style")
+            end
         end
         for (curve_name, curve) in curves            
 
@@ -624,7 +847,7 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default")
 
 
             #CPU
-            m_cpu, v_cpu, c_cpu = mpopf_model(case, curve; form = :rect)
+            m_cpu, v_cpu, c_cpu = mpopf_model(case, curve; form = form)
             result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
 
             it, tot, ad = ipopt_stats("ipopt_output")
@@ -659,7 +882,206 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default")
                 :cpu_medium => df_cpu_medium,
                 :cpu_hard => df_cpu_hard,)
     
-    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    if !storage
+        generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    else
+        generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_storage_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    end
     return mpopf_results
 end
 
+
+function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve = [.88, .90, .88, .86, .87, .88, .9, .92, .93, .95, .97, 1.0, .99, 1.0, 1.0,
+    .97, .96, .96, .93, .92, .92, .93, .89, .85, .82])
+
+    max_wall_time = Float64(4500)
+
+    function example_func(d, srating)
+        return d + .2/srating*d^2
+    end
+
+    if coords == "Polar"
+        form = :polar
+    elseif coords == "Rectangular"
+        form = :rect
+    else
+        error("Wrong coords")
+    end
+
+    df_top = DataFrame(case_name = String[])
+
+    df_gpu_no_cmp = DataFrame(nvar = Int[], ncon = Int[], id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
+        termination = String[], obj = Float64[], cvio = Float64[])
+    df_gpu_cmp = similar(df_gpu_no_cmp)
+    df_gpu_nl_cmp = similar(df_gpu_no_cmp)
+
+    df_cpu_no_cmp = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
+    df_cpu_cmp = similar(df_cpu_no_cmp)
+    df_cpu_nl_cmp = similar(df_cpu_no_cmp)
+
+
+    #Compile time on smallest case
+    model_gpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; backend = CUDABackend(), form=form)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    model_gpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; backend = CUDABackend(), form=form, storage_complementarity_constraint = true)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    model_gpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1], example_func; backend = CUDABackend(), form=form)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+
+    model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; form=form)
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
+    model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; form=form, storage_complementarity_constraint = true)
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
+    model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1], example_func; form=form)
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
+
+
+    for (i, case) in enumerate(cases)
+
+        #Requires modified to be created, with "_storage.m" appended
+        if case_style == "default"
+            case = case*"_storage.m"
+        elseif case_style == "api"
+            case = case*"__api_storage.m"
+        elseif case_style == "sad"
+            case = case*"__sad_storage.m"
+        else
+            error("Invalid case style")
+        end
+                 
+
+        
+        #No complementarity constraint
+        m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form)   
+        result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+
+        c = evaluate(m_gpu, result_gpu)        
+
+        row_gpu = (m_gpu.meta.nvar, m_gpu.meta.ncon, i, result_gpu.counters.k, result_gpu.counters.total_time, result_gpu.counters.init_time, result_gpu.counters.eval_function_time,
+            result_gpu.counters.linear_solver_time, termination_code(result_gpu.status), result_gpu.objective, c)
+        
+        push!(df_top, (case,))
+        push!(df_gpu_no_cmp, row_gpu)
+
+        m_cpu, v_cpu, c_cpu = mpopf_model(case, curve; form = form)
+        result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_cpu)
+        row_cpu = (i, it, tot, ad, termination_code(result_cpu.solver_specific[:internal_msg]),  result_cpu.objective, c)
+        push!(df_cpu_no_cmp, row_cpu)
+
+        #Complementarity constraint enforced
+        m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form, storage_complementarity_constraint = true)   
+        result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+
+        c = evaluate(m_gpu, result_gpu)        
+
+        row_gpu = (m_gpu.meta.nvar, m_gpu.meta.ncon, i, result_gpu.counters.k, result_gpu.counters.total_time, result_gpu.counters.init_time, result_gpu.counters.eval_function_time,
+            result_gpu.counters.linear_solver_time, termination_code(result_gpu.status), result_gpu.objective, c)
+        
+        push!(df_gpu_cmp, row_gpu)
+
+        m_cpu, v_cpu, c_cpu = mpopf_model(case, curve; form = form, storage_complementarity_constraint=true)
+        result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_cpu)
+        row_cpu = (i, it, tot, ad, termination_code(result_cpu.solver_specific[:internal_msg]),  result_cpu.objective, c)
+        push!(df_cpu_cmp, row_cpu)
+
+        #Replace piecewise complementarity constraint with NL smooth function
+        m_gpu, v_gpu, c_gpu = mpopf_model(case, curve, example_func; backend = CUDABackend(), form=form)   
+        result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+
+        c = evaluate(m_gpu, result_gpu)        
+
+        row_gpu = (m_gpu.meta.nvar, m_gpu.meta.ncon, i, result_gpu.counters.k, result_gpu.counters.total_time, result_gpu.counters.init_time, result_gpu.counters.eval_function_time,
+            result_gpu.counters.linear_solver_time, termination_code(result_gpu.status), result_gpu.objective, c)
+        
+        push!(df_gpu_nl_cmp, row_gpu)
+
+        m_cpu, v_cpu, c_cpu = mpopf_model(case, curve, example_func; form = form)
+        result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_cpu)
+        row_cpu = (i, it, tot, ad, termination_code(result_cpu.solver_specific[:internal_msg]),  result_cpu.objective, c)
+        push!(df_cpu_nl_cmp, row_cpu)
+           
+    end
+
+    comp_names = ["no cc", "cc", "nl cc"]
+
+    stor_results = Dict(:top => df_top,
+                :gpu_no_cmp => df_gpu_no_cmp,
+                :gpu_cmp => df_gpu_cmp,
+                :gpu_nl_cmp => df_gpu_nl_cmp,
+                :cpu_no_cmp => df_cpu_no_cmp,
+                :cpu_cmp => df_cpu_cmp,
+                :cpu_nl_cmp => df_cpu_nl_cmp,)
+    
+    generate_tex_stor_comp(stor_results, coords, comp_names; filename="benchmark_results_mpopf_storage_comps_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    return stor_results
+end
+
+sc_cases = [("data/C3E4N00073D1_scenario_303.json", "data/C3E4N00073D1_scenario_303_solution.json"),
+            ("data/C3E4N00073D3_scenario_303.json", "data/C3E4N00073D3_scenario_303_solution.json")]
+
+function solve_sc_cases(cases, tol, include_ctg)
+
+    df_top = DataFrame(nvar = Int[], ncon = Int[], case_name = String[])
+
+    df_gpu = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
+        termination = String[], obj = Float64[], cvio = Float64[])
+
+    df_cpu = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
+
+
+    #Compile time on smallest case
+    
+    test_case = "data/C3E4N00073D1_scenario_303.json"
+    test_uc_case = "data/C3E4N00073D1_scenario_303_solution.json"
+    max_wall_time = Float64(7000)
+    
+    model_gpu, ~ = scopf_model(test_case, test_uc_case; backend = CUDABackend(), include_ctg = include_ctg)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+
+    model_cpu, ~ = scopf_model(test_case, test_uc_case; include_ctg = include_ctg)
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
+
+
+    for (i, case) in enumerate(cases)          
+
+        #GPU
+        (problem_case, uc_case) = case
+        m_gpu, v_gpu, c_gpu = scopf_model(problem_case, uc_case; backend = CUDABackend(), include_ctg = include_ctg)   
+        result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+
+        c = evaluate(m_gpu, result_gpu)        
+
+        row_gpu = (i, result_gpu.counters.k, result_gpu.counters.total_time, result_gpu.counters.init_time, result_gpu.counters.eval_function_time,
+            result_gpu.counters.linear_solver_time, termination_code(result_gpu.status), result_gpu.objective, c)
+
+        m_cpu, v_cpu, c_cpu = scopf_model(problem_case, uc_case); include_ctg = include_ctg
+        result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+
+        it, tot, ad = ipopt_stats("ipopt_output")
+
+        c = evaluate(m_cpu, result_cpu)
+        
+        row_cpu = (i, it, tot, ad, termination_code(result_cpu.solver_specific[:internal_msg]),  result_cpu.objective, c)
+
+        push!(df_top, (m_gpu.meta.nvar, m_gpu.meta.ncon, case))
+        push!(df_gpu, row_gpu)
+        push!(df_cpu, row_cpu)
+    end
+
+    scopf_results = Dict(:top => df_top,
+                :gpu => df_gpu
+                :cpu => df_cpu)
+ 
+    #generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+   
+    return scopf_results
+end
