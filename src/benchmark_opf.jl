@@ -11,8 +11,8 @@ cases = [
 "pglib_opf_case30_as", 
 "pglib_opf_case30_ieee", 
 "pglib_opf_case5_pjm",
-"pglib_opf_case14_ieee",
-"pglib_opf_case24_ieee_rts",
+"pglib_opf_case14_ieee",]
+#="pglib_opf_case24_ieee_rts",
 "pglib_opf_case30_as",
 "pglib_opf_case30_ieee",
 "pglib_opf_case39_epri",
@@ -57,8 +57,8 @@ cases = [
 "pglib_opf_case4661_sdet",
 "pglib_opf_case4837_goc",
 "pglib_opf_case4917_goc",
-"pglib_opf_case5658_epigrids",]
-#="pglib_opf_case6468_rte",
+"pglib_opf_case5658_epigrids",
+"pglib_opf_case6468_rte",
 "pglib_opf_case6470_rte",
 "pglib_opf_case6495_rte",
 "pglib_opf_case6515_rte",
@@ -883,15 +883,31 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
 
     df_top = DataFrame(nvar = Int[], ncon = Int[], case_name = String[])
 
-    df_gpu_easy = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
+    df_lifted_kkt_easy = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
         termination = String[], obj = Float64[], cvio = Float64[])
 
-    df_gpu_medium = similar(df_gpu_easy)
-    df_gpu_hard = similar(df_gpu_easy)
+    df_lifted_kkt_medium = similar(df_lifted_kkt_easy)
+    df_lifted_kkt_hard = similar(df_lifted_kkt_easy)
 
-    df_cpu_easy = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
-    df_cpu_medium = similar(df_cpu_easy)
-    df_cpu_hard = similar(df_cpu_easy)
+    df_hybrid_kkt_easy = similar(df_lifted_kkt_easy)
+    df_hybrid_kkt_medium = similar(df_lifted_kkt_easy)
+    df_hybrid_kkt_hard = similar(df_lifted_kkt_easy)
+
+    df_madncl_easy = similar(df_lifted_kkt_easy)
+    df_madncl_medium = similar(df_lifted_kkt_easy)
+    df_madncl_hard = similar(df_lifted_kkt_easy)
+
+    df_ma27_easy = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
+    df_ma27_medium = similar(df_ma27_easy)
+    df_ma27_hard = similar(df_ma27_easy)
+
+    df_ma86_easy = similar(df_ma27_easy)
+    df_ma86_medium = similar(df_ma27_easy)
+    df_ma86_hard = similar(df_ma27_easy)
+
+    df_ma97_easy = similar(df_ma27_easy)
+    df_ma97_medium = similar(df_ma27_easy)
+    df_ma97_hard = similar(df_ma27_easy)
 
 
     #Compile time on smallest case
@@ -904,9 +920,17 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
     end
     model_gpu, ~ = mpopf_model(test_case, [1,1,1]; backend = CUDABackend(), form=form)
     ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = MadNCL.madncl(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                cudss_algorithm=MadNLP.LDL,
+                kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                equality_treatment=MadNLP.EnforceEquality,
+                fixed_variable_treatment=MadNLP.MakeParameter,)
 
     model_cpu, ~ = mpopf_model(test_case, [1,1,1]; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
 
 
     for (i, case) in enumerate(cases)
@@ -935,33 +959,69 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
 
             #GPU
             m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form)   
-            result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            result_lifted_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
 
-            c = evaluate(m_gpu, result_gpu)        
+            c = evaluate(m_gpu, result_lifted_kkt)        
 
-            row_gpu = (i, result_gpu.counters.k, result_gpu.counters.total_time, result_gpu.counters.init_time, result_gpu.counters.eval_function_time,
-                result_gpu.counters.linear_solver_time, termination_code(result_gpu.status), result_gpu.objective, c)
+            row_lifted_kkt = (i, result_lifted_kkt.counters.k, result_lifted_kkt.counters.total_time, result_lifted_kkt.counters.init_time, result_lifted_kkt.counters.eval_function_time,
+                result_lifted_kkt.counters.linear_solver_time, termination_code(result_lifted_kkt.status), result_lifted_kkt.objective, c)
+
+            result_hybrid_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                    cudss_algorithm=MadNLP.LDL,
+                                    kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                    equality_treatment=MadNLP.EnforceEquality,
+                                    fixed_variable_treatment=MadNLP.MakeParameter,)
+            c = evaluate(m_gpu, result_hybrid_kkt)
+            row_hybrid_kkt = (i, result_hybrid_kkt.counters.k, result_hybrid_kkt.counters.total_time, result_hybrid_kkt.counters.init_time, result_hybrid_kkt.counters.eval_function_time,
+                result_hybrid_kkt.counters.linear_solver_time, termination_code(result_hybrid_kkt.status), result_hybrid_kkt.objective, c)
+
+            result_madncl = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_madncl)
+            row_madncl = (i, result_madncl.counters.k, result_madncl.counters.total_time, result_madncl.counters.init_time, result_madncl.counters.eval_function_time,
+                result_madncl.counters.linear_solver_time, termination_code(result_madncl.status), result_madncl.objective, c)
+
 
 
             #CPU
             m_cpu, v_cpu, c_cpu = mpopf_model(case, curve; form = form)
-            result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
 
+            result_ma27 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
             it, tot, ad = ipopt_stats("ipopt_output")
+            c = evaluate(m_cpu, result_ma27)
+            row_ma27 = (i, it, tot, ad, termination_code(result_ma27.solver_specific[:internal_msg]),  result_ma27.objective, c)
 
-            c = evaluate(m_cpu, result_cpu)
+            result_ma86 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+            it, tot, ad = ipopt_stats("ipopt_output")
+            c = evaluate(m_cpu, result_ma86)
+            row_ma86 = (i, it, tot, ad, termination_code(result_ma86.solver_specific[:internal_msg]),  result_ma86.objective, c)
+
+            result_ma97 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+            it, tot, ad = ipopt_stats("ipopt_output")
+            c = evaluate(m_cpu, result_ma97)
+            row_ma97 = (i, it, tot, ad, termination_code(result_ma97.solver_specific[:internal_msg]),  result_ma97.objective, c)
             
-            row_cpu = (i, it, tot, ad, termination_code(result_cpu.solver_specific[:internal_msg]),  result_cpu.objective, c)
             if curve_name == "easy"
                 push!(df_top, (m_gpu.meta.nvar, m_gpu.meta.ncon, case))
-                push!(df_gpu_easy, row_gpu)
-                push!(df_cpu_easy, row_cpu)
+                push!(df_lifted_kkt_easy, row_lifted_kkt)
+                push!(df_hybrid_kkt_easy, row_hybrid_kkt)
+                push!(df_madncl_easy, row_madncl)
+                push!(df_ma27_easy, row_ma27)
+                push!(df_ma86_easy, row_ma86)
+                push!(df_ma97_easy, row_ma97)
             elseif curve_name == "medium"
-                push!(df_gpu_medium, row_gpu)
-                push!(df_cpu_medium, row_cpu)
+                push!(df_lifted_kkt_medium, row_lifted_kkt)
+                push!(df_hybrid_kkt_medium, row_hybrid_kkt)
+                push!(df_madncl_medium, row_madncl)
+                push!(df_ma27_medium, row_ma27)
+                push!(df_ma86_medium, row_ma86)
+                push!(df_ma97_medium, row_ma97)
             elseif curve_name == "hard"
-                push!(df_gpu_hard, row_gpu)
-                push!(df_cpu_hard, row_cpu)
+                push!(df_lifted_kkt_hard, row_lifted_kkt)
+                push!(df_hybrid_kkt_hard, row_hybrid_kkt)
+                push!(df_madncl_hard, row_madncl)
+                push!(df_ma27_hard, row_ma27)
+                push!(df_ma86_hard, row_ma86)
+                push!(df_ma97_hard, row_ma97)
             end
 
             
@@ -972,18 +1032,30 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
     curve_names = collect(keys(curves))
 
     mpopf_results = Dict(:top => df_top,
-                :gpu_easy => df_gpu_easy,
-                :gpu_medium => df_gpu_medium,
-                :gpu_hard => df_gpu_hard,
-                :cpu_easy => df_cpu_easy,
-                :cpu_medium => df_cpu_medium,
-                :cpu_hard => df_cpu_hard,)
+                :lifted_kkt_easy => df_lifted_kkt_easy,
+                :hybrid_kkt_easy => df_hybrid_kkt_easy,
+                :madncl_easy => df_madncl_easy,
+                :lifted_kkt_medium => df_lifted_kkt_medium,
+                :hybrid_kkt_medium => df_hybrid_kkt_medium,
+                :madncl_medium => df_madncl_medium,
+                :lifted_kkt_hard => df_lifted_kkt_hard,
+                :hybrid_kkt_hard => df_hybrid_kkt_hard,
+                :madncl_hard => df_madncl_hard,
+                :ma27_easy => df_ma27_easy,
+                :ma86_easy => df_ma86_easy,
+                :ma97_easy => df_ma97_easy,
+                :ma27_medium => df_ma27_medium,
+                :ma86_medium => df_ma86_medium,
+                :ma97_medium => df_ma97_medium,
+                :ma27_hard => df_ma27_hard,
+                :ma86_hard => df_ma86_hard,
+                :ma97_hard => df_ma97_hard,)
     
-    if !storage
-        generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
-    else
-        generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_storage_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
-    end
+    #if !storage
+    #    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    #else
+    #    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_storage_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    #end
     return mpopf_results
 end
 
