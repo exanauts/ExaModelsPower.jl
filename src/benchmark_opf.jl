@@ -1,18 +1,13 @@
 
-using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra, CSV, DataFrames, PrettyTables, Printf, Plots, SolverBenchmark, MadNCL, HybridKKT
+using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra, CSV, DataFrames, PrettyTables, Printf, Plots, SolverBenchmark, MadNCL, HybridKKT, DataStructures
 using PrettyTables: tf_latex_booktabs, LatexTableFormat
 
 
 cases = [
-"pglib_opf_case3_lmbd",
-"pglib_opf_case5_pjm", 
-"pglib_opf_case14_ieee", 
-"pglib_opf_case24_ieee_rts", 
-"pglib_opf_case30_as", 
-"pglib_opf_case30_ieee", 
-"pglib_opf_case5_pjm",
-"pglib_opf_case14_ieee",]
-#="pglib_opf_case24_ieee_rts",
+"pglib_opf_case3_lmbd", 
+"pglib_opf_case5_pjm",]
+#="pglib_opf_case14_ieee",
+"pglib_opf_case24_ieee_rts",
 "pglib_opf_case30_as",
 "pglib_opf_case30_ieee",
 "pglib_opf_case39_epri",
@@ -51,7 +46,7 @@ cases = [
 "pglib_opf_case3120sp_k",
 "pglib_opf_case3375wp_k",
 "pglib_opf_case3970_goc",
-"pglib_opf_case4020_goc",
+"pglib_opf_case4020_goc",]
 "pglib_opf_case4601_goc",
 "pglib_opf_case4619_goc",
 "pglib_opf_case4661_sdet",
@@ -160,6 +155,8 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
                           :termination, :obj, :cvio],
         "Ipopt+Ma86 (CPU)" => [:iter, :soltime, :adtime,
                           :termination, :obj, :cvio],
+        "MadNLP+Ma86 (CPU)" => [:iter, :soltime, :inittime, :adtime,
+                            :lintime, :termination, :obj, :cvio],
         "Ipopt+Ma97 (CPU)" => [:iter, :soltime, :adtime,
                           :termination, :obj, :cvio],
     )
@@ -186,10 +183,10 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         raw_row = Any[clean_case, row_top.nvar, row_top.ncon]
 
         methods = ["MadNLP+LiftedKKT (GPU)", "MadNLP+HybridKKT (GPU)", "MadNCL (GPU)",
-            "Ipopt+Ma27 (CPU)","Ipopt+Ma86 (CPU)","Ipopt+Ma97 (CPU)"]
+            "Ipopt+Ma27 (CPU)","MadNLP+Ma86 (CPU)","Ipopt+Ma97 (CPU)"]
         for (df, method) in [(df_lifted_kkt, "MadNLP+LiftedKKT (GPU)"), (df_hybrid_kkt, "MadNLP+HybridKKT (GPU)"),
                             (df_madncl, "MadNCL (GPU)"), (df_ma27, "Ipopt+Ma27 (CPU)"),
-                            (df_ma86, "Ipopt+Ma86 (CPU)"), (df_ma97, "Ipopt+Ma97 (CPU)")]
+                            (df_ma86, "MadNLP+Ma86 (CPU)"), (df_ma97, "Ipopt+Ma97 (CPU)")]
             df_row = df[i, :]
             for field in subs[method]
                 val = get(df_row, field, missing)
@@ -331,7 +328,8 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         ("MadNLP+LiftedKKT (GPU)", df_lifted_kkt),
         ("MadNLP+HybridKKT (GPU)", df_hybrid_kkt),
         ("MadNCL (GPU)", df_madncl),
-        ("Ipopt+Ma86 (CPU)", df_ma86),
+        ("Ipopt+Ma27 (CPU)", df_ma27),
+        ("MadNLP+Ma86 (CPU)", df_ma86),
         ("Ipopt+Ma97 (CPU)", df_ma97)
     ]
         nv = Float64[]
@@ -367,35 +365,37 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
 
 end
 
+function generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_mpopf.tex")
+    levels = [:easy, :medium, :hard]
+    solvers = [:lifted_kkt, :hybrid_kkt, :ma27, :ma86, :ma97]
+    labels = Dict(
+        :lifted_kkt => "MadNLP+LiftedKKT (GPU)",
+        :hybrid_kkt => "MadNLP+HybridKKT (GPU)",
+        :ma27 => "Ipopt+Ma27 (CPU)",
+        :ma86 => "MadNLP+Ma86 (CPU)",
+        :ma97 => "Ipopt+Ma97 (CPU)"
+    )
 
-function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf.tex")
+    reverse_labels = Dict(
+         "MadNLP+LiftedKKT (GPU)" => :lifted_kkt,
+         "MadNLP+HybridKKT (GPU)" => :hybrid_kkt,
+         "Ipopt+Ma27 (CPU)" => :ma27,
+         "MadNLP+Ma86 (CPU)" => :ma86 ,
+         "Ipopt+Ma97 (CPU)" => :ma97
+    )
+
+    # Define fields
+    subs = Dict(
+        :lifted_kkt => [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio],
+        :hybrid_kkt => [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio],
+        :ma27 => [:iter, :soltime, :adtime, :termination, :obj, :cvio],
+        :ma86 => [:iter, :soltime, :adtime, :termination, :obj, :cvio],
+        :ma97 => [:iter, :soltime, :adtime, :termination, :obj, :cvio]
+    )
 
     df_top = mpopf_results[:top]
-    df_gpu_easy = mpopf_results[:gpu_easy]
-    df_cpu_easy = mpopf_results[:cpu_easy]
-    df_gpu_medium = mpopf_results[:gpu_medium]
-    df_cpu_medium = mpopf_results[:cpu_medium]
-    df_gpu_hard = mpopf_results[:gpu_hard]
-    df_cpu_hard = mpopf_results[:cpu_hard]
+    n = nrow(df_top)
 
-    # --- Build dynamic method names ---
-    methods = String[]
-    for curve in curve_names
-        push!(methods, "GPU $coords $curve")
-        push!(methods, "CPU $coords $curve")
-    end
-
-    # --- Define what fields each method has ---
-    subs = Dict{String, Vector{Symbol}}()
-    for method in methods
-        if startswith(method, "GPU")
-            subs[method] = [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio]
-        elseif startswith(method, "CPU")
-            subs[method] = [:iter, :soltime, :adtime, :termination, :obj, :cvio]
-        end
-    end
-
-    # --- Format values ---
     format_val(field, val) =
         (val === missing || val === nothing) ? missing :
         !(val isa Number) ? string(val) :
@@ -405,153 +405,137 @@ function generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchm
 
     format_k(val) = isnothing(val) || val === missing ? missing : @sprintf("%.1fk", val / 1000)
 
-    # --- Construct rows ---
-    rows = Any[]
-    raw_rows = Any[]
-    for (i, row_top) in enumerate(eachrow(df_top))
-        case = row_top.case_name
-        clean_case = replace(case, r"^pglib_opf_case" => "", r"\.m$" => "")
+    all_rows = Any[]
+    summary_rows = Any[]
+    raw_all_rows = Any[]
+    raw_summary_rows = Any[]
 
-        row = Any[clean_case, format_k(row_top.nvar), format_k(row_top.ncon)]
-        raw_row = Any[clean_case, row_top.nvar, row_top.ncon]
+    methods = String[]
+    summary_methods = String[]
 
-        #Easy
-        row_gpu_easy = df_gpu_easy[i, :]
-        for field in subs["GPU "*coords*" easy"]
-            val = get(row_gpu_easy, field, missing)
-            push!(row, format_val(field, val))
-            push!(raw_row, val)
+    for level in levels
+        for solver in solvers
+            push!(methods, "$(labels[solver]) - $(string(level))")
         end
-
-        row_cpu_easy = df_cpu_easy[i, :]
-        for field in subs["CPU "*coords*" easy"]
-            val = get(row_cpu_easy, field, missing)
-            push!(row, format_val(field, val))
-            push!(raw_row, val)
-        end
-
-        #Medium
-        row_gpu_medium = df_gpu_medium[i, :]
-        for field in subs["GPU "*coords*" medium"]
-            val = get(row_gpu_medium, field, missing)
-            push!(row, format_val(field, val))
-            push!(raw_row, val)
-        end
-
-        row_cpu_medium = df_cpu_medium[i, :]
-        for field in subs["CPU "*coords*" medium"]
-            val = get(row_cpu_medium, field, missing)
-            push!(row, format_val(field, val))
-            push!(raw_row, val)
-        end
-
-        #Hard
-        row_gpu_hard = df_gpu_hard[i, :]
-        for field in subs["GPU "*coords*" hard"]
-            val = get(row_gpu_hard, field, missing)
-            push!(row, format_val(field, val))
-            push!(raw_row, val)
-        end
-
-        row_cpu_hard = df_cpu_hard[i, :]
-        for field in subs["CPU "*coords*" hard"]
-            val = get(row_cpu_hard, field, missing)
-            push!(row, format_val(field, val))
-            push!(raw_row, val)
-        end
-
-
-        push!(rows, row)
-        push!(raw_rows, raw_row)
+        push!(summary_methods, "$(labels[:lifted_kkt]) - $(string(level))")
+        push!(summary_methods, "$(labels[:ma27]) - $(string(level))")
     end
 
-    table_data = permutedims(reduce(hcat, rows))
+    for i in 1:n
+        row_top = df_top[i, :]
+        case = replace(row_top.case_name, r"^pglib_opf_case" => "", r"\.m$" => "")
+        row = Any[case, format_k(row_top.nvar), format_k(row_top.ncon)]
+        raw_row = Any[case, row_top.nvar, row_top.ncon]
+        summary_row = copy(row)
+        raw_summary_row = copy(raw_row)
 
-    # --- Header construction ---
-    h_top    = ["Case", "nvars", "ncons"]
-    h_bottom = ["",     "",      ""]
+        for level in levels
+            for solver in solvers
+                df = mpopf_results[Symbol(solver, "_", level)]
+                for field in subs[solver]
+                    val = get(df[i, :], field, missing)
+                    push!(row, format_val(field, val))
+                    push!(raw_row, val)
+                end
+            end
 
-    for m in methods
-        n = length(subs[m])
-        push!(h_top, m)
-        append!(h_top, fill("", n-1))
-        append!(h_bottom, string.(subs[m]))
+            for solver in [:lifted_kkt, :ma27]
+                df = mpopf_results[Symbol(solver, "_", level)]
+                for field in subs[solver]
+                    val = get(df[i, :], field, missing)
+                    push!(summary_row, format_val(field, val))
+                    push!(raw_summary_row, val)
+                end
+            end
+        end
+        push!(all_rows, row)
+        push!(raw_all_rows, raw_row)
+        push!(summary_rows, summary_row)
+        push!(raw_summary_rows, raw_summary_row)
     end
 
-    # --- Group boundary vlines ---
-    function group_boundaries(methods, subs)
-        idx = Int[0, 1, 2, 3]  # vertical lines at case label and after header
+    function build_header(methods, subs_map)
+        h_top = ["Case", "nvars", "ncons"]
+        h_bottom = ["", "", ""]
+        for m in methods
+            m_fix = match(r"^.*?\)", m)
+            name = m_fix === nothing ? "" : m_fix.match
+            solver = reverse_labels[match(r"^.*?\)", m).match]
+            fields = subs_map[solver]
+            push!(h_top, m)
+            append!(h_top, fill("", length(fields) - 1))
+            append!(h_bottom, string.(fields))
+        end
+        return h_top, h_bottom
+    end
+
+    function write_tables(rows, raw_rows, methods, subs_map, base_filename)
+        h_top, h_bottom = build_header(methods, subs_map)
+        table_data = permutedims(reduce(hcat, rows))
+        vlines = Int[0, 1, 2, 3]
         col = 3
         for m in methods
-            col += length(subs[m])
-            push!(idx, col)
+            solver = reverse_labels[match(r"^.*?\)", m).match]
+            col += length(subs_map[solver])
+            push!(vlines, col)
         end
-        return idx
+        hlines = vcat(0, 1, collect(6:5:length(rows)), length(rows)+1)
+
+        open(base_filename * ".tex", "w") do io
+            pretty_table(io, table_data; header=(h_top, h_bottom),
+                         backend=Val(:latex), tf=tf_latex_default,
+                         alignment=:c, vlines=vlines, hlines=hlines)
+        end
+
+        open(base_filename * ".txt", "w") do io
+            pretty_table(io, table_data; header=(h_top, h_bottom),
+                         backend=Val(:text), alignment=:c)
+        end
+
+        flat_header = vcat(["Case", "nvars", "ncons"], vcat([
+            "$(m)_$(f)" for m in methods for f in subs_map[reverse_labels[match(r"^.*?\)", m).match]]
+        ]))
+        df = DataFrame([Symbol(h) => col for (h, col) in zip(flat_header, eachcol(permutedims(reduce(hcat, raw_rows))))])
+        CSV.write(base_filename * ".csv", df)
     end
 
-    vlines = group_boundaries(methods, subs)
+    write_tables(all_rows, raw_all_rows, methods, subs, replace(filename, r"\.tex$" => "_full"))
+    write_tables(summary_rows, raw_summary_rows, summary_methods, subs, replace(filename, r"\.tex$" => "_summary"))
 
-    # --- Horizontal rules every 5 rows ---
-    nrows = length(rows)
-    hlines = vcat(0, 1, collect(6:5:nrows), nrows+1)
+    for level in levels
+        selected = Dict(k => mpopf_results[Symbol(k, "_", level)] for k in solvers)
+        p = performance_profile(selected, df -> df.soltime)
+        Plots.svg(p, replace(filename, r"\.tex$" => "_profile_" * string(level)))
 
-    # --- Output LaTeX ---
-    open(filename, "w") do io
-        pretty_table(
-            io, table_data;
-            header = (h_top, h_bottom),
-            backend = Val(:latex),
-            tf = tf_latex_default,
-            alignment = :c,
-            vlines = vlines,
-            hlines = hlines
-        )
+        baseline = mpopf_results[Symbol(:ma27_, level)]
+        scatter_data = Dict{String, Tuple{Vector{Float64}, Vector{Float64}}}()
+        for solver in solvers
+            df = mpopf_results[Symbol(solver, "_", level)]
+            nv = Float64[]
+            speedup = Float64[]
+            for i in 1:n
+                t_base = get(baseline[i, :], :soltime, missing)
+                t = get(df[i, :], :soltime, missing)
+                nv_i = get(df_top[i, :], :nvar, missing)
+                if t !== missing && t_base !== missing && nv_i !== missing && t > 0 && t_base > 0
+                    push!(nv, float(nv_i))
+                    push!(speedup, t_base / t)
+                end
+            end
+            scatter_data[labels[solver]] = (nv, speedup)
+        end
+
+        p = plot(xlabel="nvar", ylabel="Speedup vs. Ma27",
+                 xscale=:log10, yscale=:log10, legend=:topleft,
+                 title="Speedup vs. Problem Size ($level)",
+                 markerstrokewidth=0)
+        for (method, (nv, speedup)) in scatter_data
+            scatter!(p, nv, speedup; label=method, ms=4)
+        end
+        savefig(p, replace(filename, r"\.tex$" => "_speedup_" * string(level) * ".svg"))
     end
-
-
-    # Write plain-text version (filename.txt)
-    txt_filename = replace(filename, r"\.tex$" => ".txt")
-    open(txt_filename, "w") do io
-        pretty_table(
-            io, table_data;
-            header = (h_top, h_bottom),
-            backend = Val(:text),
-            alignment = :c
-        )
-    end
-
-    # Write CSV version (raw values)
-    csv_filename = replace(filename, r"\.tex$" => ".csv")
-    flat_header = vcat(["Case", "nvars", "ncons"], vcat([
-        string(m, "_", f) for m in methods for f in subs[m]
-    ]))
-    df = DataFrame([Symbol(h) => col for (h, col) in zip(flat_header, eachcol(permutedims(reduce(hcat, raw_rows))))])
-    CSV.write(csv_filename, df)
-
-    #Make charts
-    selected = Dict(
-        :gpu_easy => mpopf_results[:gpu_easy],
-        :cpu_easy => mpopf_results[:cpu_easy],
-    )
-    p = performance_profile(selected, df -> df.soltime)
-    Plots.svg(p, replace(filename, r"\.tex$" => "_easy"))
-
-    selected = Dict(
-        :gpu_medium => mpopf_results[:gpu_medium],
-        :cpu_medium => mpopf_results[:cpu_medium],
-    )
-    p = performance_profile(selected, df -> df.soltime)
-    Plots.svg(p, replace(filename, r"\.tex$" => "_medium"))
-
-    selected = Dict(
-        :gpu_hard => mpopf_results[:gpu_hard],
-        :cpu_hard => mpopf_results[:cpu_hard],
-    )
-    p = performance_profile(selected, df -> df.soltime)
-    Plots.svg(p, replace(filename, r"\.tex$" => "_hard"))
-
-
 end
+
 
 function generate_tex_stor_comp(stor_results, coords, comp_names; filename="benchmark_results_mpopf_storage.tex")
 
@@ -777,6 +761,15 @@ function solve_static_cases(cases, tol, coords; case_style = "default")
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
+    #=~ = madnlp(model_cpu; tol=tol, max_wall_time=max_wall_time, disable_garbage_collector=true, 
+        kkt_system=MadNLP.SparseCondensedKKTSystem,
+        dual_initialized=true,
+        equality_treatment=MadNLP.RelaxEquality,
+        fixed_variable_treatment=MadNLP.RelaxBound,
+        linear_solver=Ma86Solver,
+        ma86_num_threads=8,
+        max_iter = 3
+        )=#
 
 
 
@@ -841,6 +834,20 @@ function solve_static_cases(cases, tol, coords; case_style = "default")
         it, tot, ad = ipopt_stats("ipopt_output")
         c = evaluate(m_cpu, result_ma86)
         push!(df_ma86, (i, it, tot, ad, termination_code(result_ma86.solver_specific[:internal_msg]), result_ma86.objective, c))
+
+        #Use this code to check ma86 on madnlp
+        #=result_ma86 = madnlp(m_cpu; tol=tol, max_wall_time=max_wall_time, disable_garbage_collector=true, 
+        kkt_system=MadNLP.SparseCondensedKKTSystem,
+        dual_initialized=true,
+        equality_treatment=MadNLP.RelaxEquality,
+        fixed_variable_treatment=MadNLP.RelaxBound,
+        linear_solver=Ma86Solver,
+        ma86_num_threads=8,
+        )
+        c = evaluate(m_cpu, result_ma86)
+        push!(df_ma86, (i, result_ma86.counters.k, result_ma86.counters.total_time, result_ma86.counters.init_time, result_ma86.counters.eval_function_time, 
+        result_ma86.counters.linear_solver_time, termination_code(result_ma86.status), result_ma86.objective, c))
+=#
 
         result_ma97 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
         it, tot, ad = ipopt_stats("ipopt_output")
@@ -1051,11 +1058,11 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
                 :ma86_hard => df_ma86_hard,
                 :ma97_hard => df_ma97_hard,)
     
-    #if !storage
-    #    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
-    #else
-    #    generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_storage_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
-    #end
+    if !storage
+        generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "") * "_.tex")
+    else
+        generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_mpopf_storage_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "") * "_.tex")
+    end
     return mpopf_results
 end
 
