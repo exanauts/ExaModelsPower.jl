@@ -49,7 +49,7 @@ mp_stor_test_cases = [("../data/pglib_opf_case3_lmbd_mod.m", "case3", "../data/c
                         true_sol_case5_curve_stor, true_sol_case5_curve_stor_func, true_sol_case5_pregen_stor, true_sol_case5_pregen_stor_func)]
 
 function example_func(d, srating)
-    return d + .2/srating*d^2
+    return d + 20/srating*d^2
 end
 
 function runtests()
