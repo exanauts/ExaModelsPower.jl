@@ -7,7 +7,8 @@ ExaModelsPower.jl is an optimal power flow models using ExaModels.jl
 ## Usage
 ### Static optimal power flow
 ```julia
-using ExaModelsPower, MadNLP, MadNLPGPU, CUDA, ExaModels
+using ExaModelsPower, MadNLP, MadNLPGPU, CUDA, ExaModels, GOC3Benchmark, JSON
+
 
 model, vars, cons = opf_model(
     "pglib_opf_case118_ieee.m";
@@ -57,7 +58,7 @@ result = madnlp(model; tol=1e-6)
 
 #Alternatively, provide a smooth function for the charge/discharge efficiency to remove complementarity constraint
 function example_func(d, srating)
-    return d + .2/srating*d^2
+    return -((s_rating/2)^d)+1
 end
 
 model, vars, cons = mpopf_model(

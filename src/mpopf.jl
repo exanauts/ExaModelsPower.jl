@@ -69,21 +69,6 @@ function build_base_mpopf(core, data, N)
     p = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
     q = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
-    #Storage specific variables
-
-    #active/reactive power from bus into storage
-    pst = variable(core, size(data.storage, 1), N)
-    qst = variable(core, size(data.storage, 1), N)
-
-    #current magnitude squared
-    I2 = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)))
-
-    #ability of converter to control generation/absorption of reactive power
-    qint = variable(core, size(data.storage, 1), N; lvar = -repeat(data.srating, 1, N), uvar = repeat(data.srating, 1, N))
-
-    #energy/ state of charge
-    E = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.emax, 1, N))
-
     o = objective(core, gen_cost(g, pg[g.i,g.t]) for g in data.genarray)
 
 
@@ -116,22 +101,17 @@ function build_base_mpopf(core, data, N)
             pg = pg,
             qg = qg,
             p = p,        
-            q = q, 
-            pst = pst,
-            qst = qst,
-            I2 = I2,
-            qint = qint,
-            E = E
+            q = q,
         )
 
     return vars, cons
 end
 
 function add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
-    pg, qg, p, q, pst, qst, I2, qint, E = vars
+    pg, qg, p, q = vars
     if form == :polar
         #voltage angle, voltage magnitude
-        va = variable(core, Nbus, N;)
+        va = variable(core, Nbus, N; lvar = -pi, uvar = pi)
         vm = variable(
             core,
             Nbus, N;
@@ -164,14 +144,6 @@ function add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
         c_active_power_balance = constraint(core, c_active_power_balance_demand_polar(b, vm[b.i, b.t]) for b in data.busarray)
         c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_polar(b, vm[b.i, b.t]) for b in data.busarray)
         
-        c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus + Nbus*(a.t-1) => p[a.i, a.t] for a in data.arcarray)
-        c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus + Nbus*(a.t-1) => q[a.i, a.t] for a in data.arcarray)
-
-        c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus + Nbus*(g.t-1) => -pg[g.i, g.t] for g in data.genarray)
-        c_reactive_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus + Nbus*(g.t-1) => -qg[g.i, g.t] for g in data.genarray)
-
-        c_active_power_balance_stor = constraint!(core, c_active_power_balance, s.bus + Nbus*(s.t-1) => pst[s.c, s.t] for s in data.storarray)
-        c_reactive_power_balance_stor = constraint!(core, c_reactive_power_balance, s.bus + Nbus*(s.t-1) => qst[s.c, s.t] for s in data.storarray)
         
         cons = (;cons...,
                 c_ref_angle = c_ref_angle,
@@ -183,7 +155,6 @@ function add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
                 c_active_power_balance = c_active_power_balance,
                 c_reactive_power_balance = c_reactive_power_balance)
         vars = (;vars..., va = va, vm = vm)
-        return vars, cons
 
     elseif form == :rect
         #real, imaginary voltage
@@ -213,15 +184,6 @@ function add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
         
         c_active_power_balance = constraint(core, c_active_power_balance_demand_rect(b, vr[b.i, b.t], vim[b.i, b.t]) for b in data.busarray)
         c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_rect(b, vr[b.i, b.t], vim[b.i, b.t]) for b in data.busarray)
-        
-        c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus + Nbus*(a.t-1) => p[a.i, a.t] for a in data.arcarray)
-        c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus + Nbus*(a.t-1) => q[a.i, a.t] for a in data.arcarray)
-
-        c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus + Nbus*(g.t-1) => -pg[g.i, g.t] for g in data.genarray)
-        c_reactive_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus + Nbus*(g.t-1) => -qg[g.i, g.t] for g in data.genarray)
-
-        c_active_power_balance_stor = constraint!(core, c_active_power_balance, s.bus + Nbus*(s.t-1) => pst[s.c, s.t] for s in data.storarray)
-        c_reactive_power_balance_stor = constraint!(core, c_reactive_power_balance, s.bus + Nbus*(s.t-1) => qst[s.c, s.t] for s in data.storarray)
 
         c_voltage_magnitude = constraint(
                 core, c_voltage_magnitude_rect(vr[b.i, b.t], vim[b.i, b.t])
@@ -240,9 +202,16 @@ function add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
                 c_reactive_power_balance = c_reactive_power_balance,
                 c_voltage_magnitude = c_voltage_magnitude)
         vars = (;vars..., vr = vr, vim = vim)
-        return vars, cons
-
+        
     end
+
+    c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus + Nbus*(a.t-1) => p[a.i, a.t] for a in data.arcarray)
+    c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus + Nbus*(a.t-1) => q[a.i, a.t] for a in data.arcarray)
+
+    c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus + Nbus*(g.t-1) => -pg[g.i, g.t] for g in data.genarray)
+    c_reactive_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus + Nbus*(g.t-1) => -qg[g.i, g.t] for g in data.genarray)
+
+    return vars, cons
 end
 
 function build_mpopf(data, Nbus, N, form; backend = nothing, T = Float64, storage_complementarity_constraint = false, kwargs...)
@@ -252,7 +221,7 @@ function build_mpopf(data, Nbus, N, form; backend = nothing, T = Float64, storag
     vars, cons = add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
 
     if length(data.storarray) > 0
-        vars, cons = build_mpopf_stor_main(core, data, N, vars, cons, form)
+        vars, cons = build_mpopf_stor_main(core, data, N, Nbus, vars, cons, form)
         vars, cons = add_piecewise_cons(core, data, N, vars, cons, storage_complementarity_constraint)
     end
     
@@ -268,7 +237,7 @@ function build_mpopf(data, Nbus, N, discharge_func::Function, form; backend = no
     vars, cons = add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
 
     if length(data.storarray) > 0
-        vars, cons = build_mpopf_stor_main(core, data, N, vars, cons, form)
+        vars, cons = build_mpopf_stor_main(core, data, N, Nbus, vars, cons, form)
         vars, cons = add_smooth_cons(core, data, N, vars, cons, discharge_func)
     end
 
@@ -276,21 +245,36 @@ function build_mpopf(data, Nbus, N, discharge_func::Function, form; backend = no
     return model, vars, cons
 end
 
-function build_mpopf_stor_main(core, data, N, vars, cons, form)
+function build_mpopf_stor_main(core, data, N, Nbus, vars, cons, form)
 
-    pst = vars.pst
-    qst = vars.qst
-    qint = vars.qint
-    I2 = vars.I2
-    E = vars.E
+    #Storage specific variables
+
+    #active/reactive power from bus into storage
+    pst = variable(core, size(data.storage, 1), N)
+    qst = variable(core, size(data.storage, 1), N)
+
+    #current magnitude squared
+    I2 = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)))
+
+    #ability of converter to control generation/absorption of reactive power
+    qint = variable(core, size(data.storage, 1), N; lvar = -repeat(data.srating, 1, N), uvar = repeat(data.srating, 1, N))
+
+    #energy/ state of charge
+    E = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.emax, 1, N))
 
     #discharge from battery to grid
-    pstd = variable(core, size(data.storage, 1), N; lvar = zeros(size(data.storarray)), uvar = repeat(data.pdmax, 1, N))
-    vars = (;vars..., pstd=pstd)
+    pstd = variable(core, size(data.storage, 1), N; uvar = repeat(data.pdmax, 1, N))
+    vars = (;vars..., pst=pst, qst=qst, I2=I2, qint=qint, E=E, pstd=pstd)
+
+    c_active_power_balance = cons.c_active_power_balance
+    c_reactive_power_balance = cons.c_reactive_power_balance
+
+    c_active_power_balance_stor = constraint!(core, c_active_power_balance, s.bus + Nbus*(s.t-1) => pst[s.c, s.t] for s in data.storarray)
+    c_reactive_power_balance_stor = constraint!(core, c_reactive_power_balance, s.bus + Nbus*(s.t-1) => qst[s.c, s.t] for s in data.storarray)
 
     c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.c, s.t], qint[s.c, s.t], I2[s.c, s.t]) for s in data.storarray)
 
-    c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = lcon = fill(-Inf, size(data.storarray)))
+    c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.c, s.t], qst[s.c, s.t]) for s in data.storarray; lcon = fill(-Inf, size(data.storarray)))
 
     if form == :polar
         vm = vars.vm
@@ -322,6 +306,8 @@ function add_piecewise_cons(core, data, N, vars, cons, storage_complementarity_c
     c_storage_state_init = constraint(core, c_stor_state(s, E[s.c, s.t], s.Einit, pstc[s.c, s.t], pstd[s.c, s.t]) for s in data.storarray[:, 1])
 
     c_discharge_thermal_limit = constraint(core, c_discharge_lim(pstd[s.c, s.t], pstc[s.c, s.t]) for s in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+
+    c_discharge_positivity = constraint(core, pstd[s.c, s.t] for s in data.storarray; ucon = fill(Inf, size(data.storarray)))
 
     #Complimentarity constraint
     if storage_complementarity_constraint
