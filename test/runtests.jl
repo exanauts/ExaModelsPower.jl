@@ -67,7 +67,7 @@ function runtests()
                 result = madnlp(m; print_level = MadNLP.ERROR)
                 va, vm, pg, qg, p, q = v
 
-                nlp_solver = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol"=>result.options.tol, "print_level"=>0)
+                nlp_solver = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol"=>Float64(result.options.tol), "print_level"=>0)
                 result_pm = solve_opf(filename,ACPPowerModel, nlp_solver)
 
                 
@@ -93,7 +93,7 @@ function runtests()
                 result = madnlp(m; print_level = MadNLP.ERROR)
                 vr, vim, pg, qg, p, q = v
 
-                nlp_solver = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol"=>result.options.tol, "print_level"=>0)
+                nlp_solver = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol"=>Float64(result.options.tol), "print_level"=>0)
                 result_pm = solve_opf(filename, ACRPowerModel, nlp_solver)
 
                 m_pm = JuMP.Model()
