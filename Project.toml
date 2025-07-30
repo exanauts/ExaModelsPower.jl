@@ -11,6 +11,7 @@ ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 GOC3Benchmark = "3a45b339-860d-44d0-a64b-5f943cdd120b"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
 [compat]
 ExaModels = "~0.8"
