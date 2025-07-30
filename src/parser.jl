@@ -135,6 +135,7 @@ function process_ac_power_data(filename)
         emax = isempty(ref[:storage]) ? Vector{NamedTuple{(:i,), Tuple{Int64}}}() : [s["energy_rating"] for (i, s) in ref[:storage]],
     )
 
+    
     @info "Saving JLD2 cache file"
     d, f = splitdir(filename)
     name,ext = splitext(f)
