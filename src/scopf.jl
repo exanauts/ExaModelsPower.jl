@@ -671,9 +671,7 @@ function scopf_model(
             z_t_ctg_avg = z_t_ctg_avg)
         end
 
-    #unincluded_obj = -(z_jt_on_pr + z_jt_on_cs + z_jt_su_pr + z_jt_su_cs + z_jt_su_ln + z_jt_su_xf
-    #                + z_jt_sd_pr + z_jt_sd_cs + z_jt_sd_ln + z_jt_sd_xf + z_jt_sus_pr + z_jt_sus_cs)
-
+   
     return model, sc_data_array, vars, lengths
 
 end
