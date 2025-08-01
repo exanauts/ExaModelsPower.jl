@@ -800,27 +800,54 @@ function solve_static_cases(cases, tol, coords; case_style = "default")
 
         #GPU 
         m_gpu, v_gpu, c_gpu = opf_model(case; backend = CUDABackend(), form=form)   
-
-        result_lifted_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_lifted_kkt)
-        push!(df_lifted_kkt, (i, result_lifted_kkt.counters.k, result_lifted_kkt.counters.total_time, result_lifted_kkt.counters.init_time, result_lifted_kkt.counters.eval_function_time, 
-        result_lifted_kkt.counters.linear_solver_time, termination_code(result_lifted_kkt.status), result_lifted_kkt.objective, c))
         push!(df_top, (m_gpu.meta.nvar, m_gpu.meta.ncon, case))
 
-        result_hybrid_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
-                                    cudss_algorithm=MadNLP.LDL,
-                                    kkt_system=HybridKKT.HybridCondensedKKTSystem,
-                                    equality_treatment=MadNLP.EnforceEquality,
-                                    fixed_variable_treatment=MadNLP.MakeParameter,)
-        c = evaluate(m_gpu, result_hybrid_kkt)
-        push!(df_hybrid_kkt, (i, result_hybrid_kkt.counters.k, result_hybrid_kkt.counters.total_time, result_hybrid_kkt.counters.init_time, result_hybrid_kkt.counters.eval_function_time, 
-        result_hybrid_kkt.counters.linear_solver_time, termination_code(result_hybrid_kkt.status), result_hybrid_kkt.objective, c))
+        try
+            result_lifted_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_lifted_kkt)
+            push!(df_lifted_kkt, (i, result_lifted_kkt.counters.k, result_lifted_kkt.counters.total_time, result_lifted_kkt.counters.init_time, result_lifted_kkt.counters.eval_function_time, 
+            result_lifted_kkt.counters.linear_solver_time, termination_code(result_lifted_kkt.status), result_lifted_kkt.objective, c))
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                push!(df_lifted_kkt, (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+            else
+                rethrow(e)
+            end
+        end
 
-        result_madncl = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_madncl)
-        push!(df_madncl, (i, result_madncl.counters.k, result_madncl.counters.total_time, result_madncl.counters.init_time, result_madncl.counters.eval_function_time, 
-        result_madncl.counters.linear_solver_time, termination_code(result_madncl.status), result_madncl.objective, c))
+        try
+            result_hybrid_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                        cudss_algorithm=MadNLP.LDL,
+                                        kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                        equality_treatment=MadNLP.EnforceEquality,
+                                        fixed_variable_treatment=MadNLP.MakeParameter,)
+            c = evaluate(m_gpu, result_hybrid_kkt)
+            push!(df_hybrid_kkt, (i, result_hybrid_kkt.counters.k, result_hybrid_kkt.counters.total_time, result_hybrid_kkt.counters.init_time, result_hybrid_kkt.counters.eval_function_time, 
+            result_hybrid_kkt.counters.linear_solver_time, termination_code(result_hybrid_kkt.status), result_hybrid_kkt.objective, c))
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                push!(df_hybrid_kkt, (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+            else
+                rethrow(e)
+            end
+        end
 
+        try
+            result_madncl = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_madncl)
+            push!(df_madncl, (i, result_madncl.counters.k, result_madncl.counters.total_time, result_madncl.counters.init_time, result_madncl.counters.eval_function_time, 
+            result_madncl.counters.linear_solver_time, termination_code(result_madncl.status), result_madncl.objective, c))
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                push!(df_madncl, (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+            else
+                rethrow(e)
+            end
+        end
+        
 
         #CPU
         m_cpu, v_cpu, c_cpu = opf_model(case; form=form)
@@ -863,7 +890,7 @@ function solve_static_cases(cases, tol, coords; case_style = "default")
                 :ma86 => df_ma86,
                 :ma97 => df_ma97)
     
-    generate_tex_opf(opf_results, coords; filename = "benchmark_results_opf_" * case_style * "_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    generate_tex_opf(opf_results, coords; filename = "saved_data/benchmark_results_opf_" * case_style * "_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*"_"*coords*".tex")
 
     return opf_results
 end
@@ -1073,7 +1100,7 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
     max_wall_time = Float64(4500)
 
     function example_func(d, srating)
-        return d + .2/srating*d^2
+        return d +20/srating*d^2
     end
 
     if coords == "Polar"
@@ -1086,31 +1113,77 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
 
     df_top = DataFrame(case_name = String[])
 
-    df_gpu_no_cmp = DataFrame(nvar = Int[], ncon = Int[], id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
+    df_top_no_cmp = DataFrame(nvar = Int[], ncon = Int[], id = Int[])
+    df_top_cmp = similar(df_top_no_cmp)
+    df_top_nl_cmp = similar(df_top_no_cmp)
+
+    df_lifted_kkt_no_cmp = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
         termination = String[], obj = Float64[], cvio = Float64[])
-    df_gpu_cmp = similar(df_gpu_no_cmp)
-    df_gpu_nl_cmp = similar(df_gpu_no_cmp)
+    df_lifted_kkt_cmp = similar(df_lifted_kkt_no_cmp)
+    df_lifted_kkt_nl_cmp = similar(df_lifted_kkt_no_cmp)
 
-    df_cpu_no_cmp = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
-    df_cpu_cmp = similar(df_cpu_no_cmp)
-    df_cpu_nl_cmp = similar(df_cpu_no_cmp)
+    
+    df_hybrid_kkt_no_cmp = similar(df_lifted_kkt_no_cmp)
+    df_hybrid_kkt_cmp = similar(df_lifted_kkt_no_cmp)
+    df_hybrid_kkt_nl_cmp = similar(df_lifted_kkt_no_cmp)
 
+
+    df_madncl_no_cmp = similar(df_lifted_kkt_no_cmp)
+    df_madncl_cmp = similar(df_lifted_kkt_no_cmp)
+    df_madncl_nl_cmp = similar(df_lifted_kkt_no_cmp)
+
+
+
+    df_ma27_no_cmp = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
+    df_ma27_cmp = similar(df_ma27_no_cmp)
+    df_ma27_nl_cmp = similar(df_ma27_no_cmp)
+
+    df_ma86_no_cmp = similar(df_ma27_no_cmp)
+    df_ma86_cmp = similar(df_ma27_no_cmp)
+    df_ma86_nl_cmp = similar(df_ma27_no_cmp)
+
+    df_ma97_no_cmp = similar(df_ma27_no_cmp)
+    df_ma97_cmp = similar(df_ma27_no_cmp)
+    df_ma97_nl_cmp = similar(df_ma27_no_cmp)
 
     #Compile time on smallest case
     model_gpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; backend = CUDABackend(), form=form)
     ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = MadNCL.madncl(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                cudss_algorithm=MadNLP.LDL,
+                kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                equality_treatment=MadNLP.EnforceEquality,
+                fixed_variable_treatment=MadNLP.MakeParameter,)
     model_gpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; backend = CUDABackend(), form=form, storage_complementarity_constraint = true)
     ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = MadNCL.madncl(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                cudss_algorithm=MadNLP.LDL,
+                kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                equality_treatment=MadNLP.EnforceEquality,
+                fixed_variable_treatment=MadNLP.MakeParameter,)
     model_gpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1], example_func; backend = CUDABackend(), form=form)
     ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = MadNCL.madncl(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                cudss_algorithm=MadNLP.LDL,
+                kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                equality_treatment=MadNLP.EnforceEquality,
+                fixed_variable_treatment=MadNLP.MakeParameter,)
 
     model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
     model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; form=form, storage_complementarity_constraint = true)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
     model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1], example_func; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
 
     for (i, case) in enumerate(cases)
 
@@ -1129,86 +1202,183 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
         
         #No complementarity constraint
         m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form)   
-        result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-
-        c = evaluate(m_gpu, result_gpu)        
-
-        row_gpu = (m_gpu.meta.nvar, m_gpu.meta.ncon, i, result_gpu.counters.k, result_gpu.counters.total_time, result_gpu.counters.init_time, result_gpu.counters.eval_function_time,
-            result_gpu.counters.linear_solver_time, termination_code(result_gpu.status), result_gpu.objective, c)
         
+        result_lifted_kkt_no_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+        c = evaluate(m_gpu, result_lifted_kkt_no_cmp)        
+        row_lifted_kkt_no_cmp = (i, result_lifted_kkt_no_cmp.counters.k, result_lifted_kkt_no_cmp.counters.total_time, result_lifted_kkt_no_cmp.counters.init_time, result_lifted_kkt_no_cmp.counters.eval_function_time,
+            result_lifted_kkt_no_cmp.counters.linear_solver_time, termination_code(result_lifted_kkt_no_cmp.status), result_lifted_kkt_no_cmp.objective, c)
         push!(df_top, (case,))
-        push!(df_gpu_no_cmp, row_gpu)
+        push!(df_top_no_cmp, (m_gpu.meta.nvar, m_gpu.meta.ncon, i))
+        push!(df_lifted_kkt_no_cmp, row_lifted_kkt_no_cmp)
+
+        result_hybrid_kkt_no_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                            cudss_algorithm=MadNLP.LDL,
+                                            kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                            equality_treatment=MadNLP.EnforceEquality,
+                                            fixed_variable_treatment=MadNLP.MakeParameter,)
+        c = evaluate(m_gpu, result_hybrid_kkt_no_cmp)
+        row_hybrid_kkt_no_cmp = (i, result_hybrid_kkt_no_cmp.counters.k, result_hybrid_kkt_no_cmp.counters.total_time, result_hybrid_kkt_no_cmp.counters.init_time, result_hybrid_kkt_no_cmp.counters.eval_function_time,
+            result_hybrid_kkt_no_cmp.counters.linear_solver_time, termination_code(result_hybrid_kkt_no_cmp.status), result_hybrid_kkt_no_cmp.objective, c)
+        push!(df_hybrid_kkt_no_cmp, row_hybrid_kkt_no_cmp)
+
+        result_madncl_no_cmp = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+        c = evaluate(m_gpu, result_madncl_no_cmp)
+        row_madncl_no_cmp = (i, result_madncl_no_cmp.counters.k, result_madncl_no_cmp.counters.total_time, result_madncl_no_cmp.counters.init_time, result_madncl_no_cmp.counters.eval_function_time,
+                result_madncl_no_cmp.counters.linear_solver_time, termination_code(result_madncl_no_cmp.status), result_madncl_no_cmp.objective, c)
+        push!(df_madncl_no_cmp, row_madncl_no_cmp)
+
 
         m_cpu, v_cpu, c_cpu = mpopf_model(case, curve; form = form)
-        result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
 
+        result_ma27_no_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
         it, tot, ad = ipopt_stats("ipopt_output")
-        c = evaluate(m_cpu, result_cpu)
-        row_cpu = (i, it, tot, ad, termination_code(result_cpu.solver_specific[:internal_msg]),  result_cpu.objective, c)
-        push!(df_cpu_no_cmp, row_cpu)
+        c = evaluate(m_cpu, result_ma27_no_cmp)
+        row_ma27_no_cmp = (i, it, tot, ad, termination_code(result_ma27_no_cmp.solver_specific[:internal_msg]),  result_ma27_no_cmp.objective, c)
+        push!(df_ma27_no_cmp, row_ma27_no_cmp)
+
+        result_ma86_no_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_ma86_no_cmp)
+        row_ma86_no_cmp = (i, it, tot, ad, termination_code(result_ma86_no_cmp.solver_specific[:internal_msg]),  result_ma86_no_cmp.objective, c)
+        push!(df_ma86_no_cmp, row_ma86_no_cmp)
+
+        result_ma97_no_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_ma97_no_cmp)
+        row_ma97_no_cmp = (i, it, tot, ad, termination_code(result_ma97_no_cmp.solver_specific[:internal_msg]),  result_ma97_no_cmp.objective, c)
+        push!(df_ma97_no_cmp, row_ma97_no_cmp)
 
         #Complementarity constraint enforced
         m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form, storage_complementarity_constraint = true)   
-        result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-
-        c = evaluate(m_gpu, result_gpu)        
-
-        row_gpu = (m_gpu.meta.nvar, m_gpu.meta.ncon, i, result_gpu.counters.k, result_gpu.counters.total_time, result_gpu.counters.init_time, result_gpu.counters.eval_function_time,
-            result_gpu.counters.linear_solver_time, termination_code(result_gpu.status), result_gpu.objective, c)
         
-        push!(df_gpu_cmp, row_gpu)
+        result_lifted_kkt_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+        c = evaluate(m_gpu, result_lifted_kkt_cmp)        
+        row_lifted_kkt_cmp = (i, result_lifted_kkt_cmp.counters.k, result_lifted_kkt_cmp.counters.total_time, result_lifted_kkt_cmp.counters.init_time, result_lifted_kkt_cmp.counters.eval_function_time,
+            result_lifted_kkt_cmp.counters.linear_solver_time, termination_code(result_lifted_kkt_cmp.status), result_lifted_kkt_cmp.objective, c)
+        push!(df_lifted_kkt_cmp, row_lifted_kkt_cmp)
+        push!(df_top_cmp, (m_gpu.meta.nvar, m_gpu.meta.ncon, i))
+
+        result_hybrid_kkt_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                            cudss_algorithm=MadNLP.LDL,
+                                            kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                            equality_treatment=MadNLP.EnforceEquality,
+                                            fixed_variable_treatment=MadNLP.MakeParameter,)
+        c = evaluate(m_gpu, result_hybrid_kkt_cmp)
+        row_hybrid_kkt_cmp = (i, result_hybrid_kkt_cmp.counters.k, result_hybrid_kkt_cmp.counters.total_time, result_hybrid_kkt_cmp.counters.init_time, result_hybrid_kkt_cmp.counters.eval_function_time,
+            result_hybrid_kkt_cmp.counters.linear_solver_time, termination_code(result_hybrid_kkt_cmp.status), result_hybrid_kkt_cmp.objective, c)
+        push!(df_hybrid_kkt_cmp, row_hybrid_kkt_cmp)
+
+        result_madncl_cmp = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+        c = evaluate(m_gpu, result_madncl_cmp)
+        row_madncl_cmp = (i, result_madncl_cmp.counters.k, result_madncl_cmp.counters.total_time, result_madncl_cmp.counters.init_time, result_madncl_cmp.counters.eval_function_time,
+                result_madncl_cmp.counters.linear_solver_time, termination_code(result_madncl_cmp.status), result_madncl_cmp.objective, c)
+        push!(df_madncl_cmp, row_madncl_cmp)
 
         m_cpu, v_cpu, c_cpu = mpopf_model(case, curve; form = form, storage_complementarity_constraint=true)
-        result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
-
+        
+        result_ma27_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
         it, tot, ad = ipopt_stats("ipopt_output")
-        c = evaluate(m_cpu, result_cpu)
-        row_cpu = (i, it, tot, ad, termination_code(result_cpu.solver_specific[:internal_msg]),  result_cpu.objective, c)
-        push!(df_cpu_cmp, row_cpu)
+        c = evaluate(m_cpu, result_ma27_cmp)
+        row_ma27_cmp = (i, it, tot, ad, termination_code(result_ma27_cmp.solver_specific[:internal_msg]),  result_ma27_cmp.objective, c)
+        push!(df_ma27_cmp, row_ma27_cmp)
+
+        result_ma86_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_ma86_cmp)
+        row_ma86_cmp = (i, it, tot, ad, termination_code(result_ma86_cmp.solver_specific[:internal_msg]),  result_ma86_cmp.objective, c)
+        push!(df_ma86_cmp, row_ma86_cmp)
+
+        result_ma97_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_ma97_cmp)
+        row_ma97_cmp = (i, it, tot, ad, termination_code(result_ma97_cmp.solver_specific[:internal_msg]),  result_ma97_cmp.objective, c)
+        push!(df_ma97_cmp, row_ma97_cmp)
 
         #Replace piecewise complementarity constraint with NL smooth function
         m_gpu, v_gpu, c_gpu = mpopf_model(case, curve, example_func; backend = CUDABackend(), form=form)   
-        result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-
-        c = evaluate(m_gpu, result_gpu)        
-
-        row_gpu = (m_gpu.meta.nvar, m_gpu.meta.ncon, i, result_gpu.counters.k, result_gpu.counters.total_time, result_gpu.counters.init_time, result_gpu.counters.eval_function_time,
-            result_gpu.counters.linear_solver_time, termination_code(result_gpu.status), result_gpu.objective, c)
         
-        push!(df_gpu_nl_cmp, row_gpu)
+        result_lifted_kkt_nl_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+        c = evaluate(m_gpu, result_lifted_kkt_nl_cmp)        
+        row_lifted_kkt_nl_cmp = (i, result_lifted_kkt_nl_cmp.counters.k, result_lifted_kkt_nl_cmp.counters.total_time, result_lifted_kkt_nl_cmp.counters.init_time, result_lifted_kkt_nl_cmp.counters.eval_function_time,
+            result_lifted_kkt_nl_cmp.counters.linear_solver_time, termination_code(result_lifted_kkt_nl_cmp.status), result_lifted_kkt_nl_cmp.objective, c)
+        push!(df_lifted_kkt_nl_cmp, row_lifted_kkt_nl_cmp)
+        push!(df_top_nl_cmp, (m_gpu.meta.nvar, m_gpu.meta.ncon, i))
+
+        result_hybrid_kkt_nl_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                            cudss_algorithm=MadNLP.LDL,
+                                            kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                            equality_treatment=MadNLP.EnforceEquality,
+                                            fixed_variable_treatment=MadNLP.MakeParameter,)
+        c = evaluate(m_gpu, result_hybrid_kkt_nl_cmp)
+        row_hybrid_kkt_nl_cmp = (i, result_hybrid_kkt_nl_cmp.counters.k, result_hybrid_kkt_nl_cmp.counters.total_time, result_hybrid_kkt_nl_cmp.counters.init_time, result_hybrid_kkt_nl_cmp.counters.eval_function_time,
+            result_hybrid_kkt_nl_cmp.counters.linear_solver_time, termination_code(result_hybrid_kkt_nl_cmp.status), result_hybrid_kkt_nl_cmp.objective, c)
+        push!(df_hybrid_kkt_nl_cmp, row_hybrid_kkt_nl_cmp)
+
+        result_madncl_nl_cmp = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+        c = evaluate(m_gpu, result_madncl_nl_cmp)
+        row_madncl_nl_cmp = (i, result_madncl_nl_cmp.counters.k, result_madncl_nl_cmp.counters.total_time, result_madncl_nl_cmp.counters.init_time, result_madncl_nl_cmp.counters.eval_function_time,
+                result_madncl_nl_cmp.counters.linear_solver_time, termination_code(result_madncl_nl_cmp.status), result_madncl_nl_cmp.objective, c)
+        push!(df_madncl_nl_cmp, row_madncl_nl_cmp)
 
         m_cpu, v_cpu, c_cpu = mpopf_model(case, curve, example_func; form = form)
-        result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
 
+        result_ma27_nl_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
         it, tot, ad = ipopt_stats("ipopt_output")
-        c = evaluate(m_cpu, result_cpu)
-        row_cpu = (i, it, tot, ad, termination_code(result_cpu.solver_specific[:internal_msg]),  result_cpu.objective, c)
-        push!(df_cpu_nl_cmp, row_cpu)
+        c = evaluate(m_cpu, result_ma27_nl_cmp)
+        row_ma27_nl_cmp = (i, it, tot, ad, termination_code(result_ma27_nl_cmp.solver_specific[:internal_msg]),  result_ma27_nl_cmp.objective, c)
+        push!(df_ma27_nl_cmp, row_ma27_nl_cmp)
+
+        result_ma86_nl_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_ma86_nl_cmp)
+        row_ma86_nl_cmp = (i, it, tot, ad, termination_code(result_ma86_nl_cmp.solver_specific[:internal_msg]),  result_ma86_nl_cmp.objective, c)
+        push!(df_ma86_nl_cmp, row_ma86_nl_cmp)
+
+        result_ma97_nl_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_ma97_nl_cmp)
+        row_ma97_nl_cmp = (i, it, tot, ad, termination_code(result_ma97_nl_cmp.solver_specific[:internal_msg]),  result_ma97_nl_cmp.objective, c)
+        push!(df_ma97_nl_cmp, row_ma97_nl_cmp)
            
     end
 
     comp_names = ["no cc", "cc", "nl cc"]
 
     stor_results = Dict(:top => df_top,
-                :gpu_no_cmp => df_gpu_no_cmp,
-                :gpu_cmp => df_gpu_cmp,
-                :gpu_nl_cmp => df_gpu_nl_cmp,
-                :cpu_no_cmp => df_cpu_no_cmp,
-                :cpu_cmp => df_cpu_cmp,
-                :cpu_nl_cmp => df_cpu_nl_cmp,)
+                :top_no_cmp => df_top_no_cmp,
+                :top_cmp => df_top_cmp,
+                :top_nl_cmp => df_top_nl_cmp,
+                :lifted_kkt_no_cmp => df_lifted_kkt_no_cmp,
+                :lifted_kkt_cmp => df_lifted_kkt_cmp,
+                :lifted_kkt_nl_cmp => df_lifted_kkt_nl_cmp,
+                :hybrid_kkt_no_cmp => df_hybrid_kkt_no_cmp,
+                :hybrid_kkt_cmp => df_hybrid_kkt_cmp,
+                :hybrid_kkt_nl_cmp => df_hybrid_kkt_nl_cmp,
+                :madncl_no_cmp => df_madncl_no_cmp,
+                :madncl_cmp => df_madncl_cmp,
+                :madncl_nl_cmp => df_madncl_nl_cmp,
+                :ma27_no_cmp => df_ma27_no_cmp,
+                :ma27_cmp => df_ma27_cmp,
+                :ma27_nl_cmp => df_ma27_nl_cmp,
+                :ma86_no_cmp => df_ma86_no_cmp,
+                :ma86_cmp => df_ma86_cmp,
+                :ma86_nl_cmp => df_ma86_nl_cmp,
+                :ma97_no_cmp => df_ma97_no_cmp,
+                :ma97_cmp => df_ma97_cmp,
+                :ma97_nl_cmp => df_ma97_nl_cmp,)
     
-    generate_tex_stor_comp(stor_results, coords, comp_names; filename="benchmark_results_mpopf_storage_comps_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    #generate_tex_stor_comp(stor_results, coords, comp_names; filename="benchmark_results_mpopf_storage_comps_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
     return stor_results
 end
 
 sc_cases = [("data/C3E4N00073D1_scenario_303.json", "data/C3E4N00073D1_scenario_303_solution.json"),
-            ("data/C3E4N00073D3_scenario_303.json", "data/C3E4N00073D3_scenario_303_solution.json")]
+]#("data/C3E4N00073D3_scenario_303.json", "data/C3E4N00073D3_scenario_303_solution.json")]
 
 function solve_sc_cases(cases, tol, include_ctg)
 
     df_top = DataFrame(nvar = Int[], ncon = Int[], case_name = String[])
 
-    df_gpu = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
+    df_lifted_kkt = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
         termination = String[], obj = Float64[], cvio = Float64[])
 
     df_cpu = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
@@ -1222,40 +1392,73 @@ function solve_sc_cases(cases, tol, include_ctg)
     
     model_gpu, ~ = scopf_model(test_case, test_uc_case; backend = CUDABackend(), include_ctg = include_ctg)
     ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = MadNCL.madncl(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
+    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                cudss_algorithm=MadNLP.LDL,
+                kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                equality_treatment=MadNLP.EnforceEquality,
+                fixed_variable_treatment=MadNLP.MakeParameter,)
 
     model_cpu, ~ = scopf_model(test_case, test_uc_case; include_ctg = include_ctg)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
+   
 
     for (i, case) in enumerate(cases)          
 
         #GPU
         (problem_case, uc_case) = case
         m_gpu, v_gpu, c_gpu = scopf_model(problem_case, uc_case; backend = CUDABackend(), include_ctg = include_ctg)   
-        result_gpu = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
 
-        c = evaluate(m_gpu, result_gpu)        
+        result_lifted_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+        c = evaluate(m_gpu, result_lifted_kkt)
+        push!(df_lifted_kkt, (i, result_lifted_kkt.counters.k, result_lifted_kkt.counters.total_time, result_lifted_kkt.counters.init_time, result_lifted_kkt.counters.eval_function_time, 
+        result_lifted_kkt.counters.linear_solver_time, termination_code(result_lifted_kkt.status), result_lifted_kkt.objective, c))
+        push!(df_top, (m_gpu.meta.nvar, m_gpu.meta.ncon, case))
 
-        row_gpu = (i, result_gpu.counters.k, result_gpu.counters.total_time, result_gpu.counters.init_time, result_gpu.counters.eval_function_time,
-            result_gpu.counters.linear_solver_time, termination_code(result_gpu.status), result_gpu.objective, c)
+        result_hybrid_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                    cudss_algorithm=MadNLP.LDL,
+                                    kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                    equality_treatment=MadNLP.EnforceEquality,
+                                    fixed_variable_treatment=MadNLP.MakeParameter,)
+        c = evaluate(m_gpu, result_hybrid_kkt)
+        push!(df_hybrid_kkt, (i, result_hybrid_kkt.counters.k, result_hybrid_kkt.counters.total_time, result_hybrid_kkt.counters.init_time, result_hybrid_kkt.counters.eval_function_time, 
+        result_hybrid_kkt.counters.linear_solver_time, termination_code(result_hybrid_kkt.status), result_hybrid_kkt.objective, c))
+
+        result_madncl = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+        c = evaluate(m_gpu, result_madncl)
+        push!(df_madncl, (i, result_madncl.counters.k, result_madncl.counters.total_time, result_madncl.counters.init_time, result_madncl.counters.eval_function_time, 
+        result_madncl.counters.linear_solver_time, termination_code(result_madncl.status), result_madncl.objective, c))
+
+
 
         m_cpu, v_cpu, c_cpu = scopf_model(problem_case, uc_case); include_ctg = include_ctg
-        result_cpu = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
-
-        it, tot, ad = ipopt_stats("ipopt_output")
-
-        c = evaluate(m_cpu, result_cpu)
         
-        row_cpu = (i, it, tot, ad, termination_code(result_cpu.solver_specific[:internal_msg]),  result_cpu.objective, c)
+        result_ma27 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_ma27)
+        push!(df_ma27, (i, it, tot, ad, termination_code(result_ma27.solver_specific[:internal_msg]), result_ma27.objective, c))
 
-        push!(df_top, (m_gpu.meta.nvar, m_gpu.meta.ncon, case))
-        push!(df_gpu, row_gpu)
-        push!(df_cpu, row_cpu)
+        result_ma86 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_ma86)
+        push!(df_ma86, (i, it, tot, ad, termination_code(result_ma86.solver_specific[:internal_msg]), result_ma86.objective, c))
+
+        result_ma97 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+        it, tot, ad = ipopt_stats("ipopt_output")
+        c = evaluate(m_cpu, result_ma97)
+        push!(df_ma97, (i, it, tot, ad, termination_code(result_ma97.solver_specific[:internal_msg]), result_ma97.objective, c))
+ 
     end
 
     scopf_results = Dict(:top => df_top,
-                :gpu => df_gpu
-                :cpu => df_cpu)
+                :lifted_kkt => df_lifted_kkt,
+                :hybrid_kkt => df_hybrid_kkt,
+                :madncl => df_madncl,
+                :ma27 => df_ma27,
+                :ma86 => df_ma86,
+                :ma97 => df_ma97)
  
     #generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
    
