@@ -11,7 +11,7 @@ ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 
 [compat]
-ExaModels = "~0.8"
+ExaModels = "~0.9"
 PowerModels = "~0.21"
 JLD2 = "~0.5"
 CUDA = "~5"
