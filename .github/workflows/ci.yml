@@ -34,9 +34,10 @@ jobs:
           key: compiled-${{ runner.os }}-${{ hashFiles('**/Project.toml') }}-${{ hashFiles('**/Manifest.toml') }}
           restore-keys: compiled-${{ runner.os }}-
 
+
       - name: Install package dependencies
         run: |
-          julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
+          julia --project=. -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/lanl-ansi/GOC3Benchmark.jl")); Pkg.instantiate(); Pkg.precompile()'
 
       - name: Check for CUDA availability
         id: check-cuda
