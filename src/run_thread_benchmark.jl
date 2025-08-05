@@ -1,7 +1,33 @@
-using ExaModelsPower, MadNLP, ExaModels, MadNLPHSL, NLPModelsIpopt, NLPModels
+using ExaModelsPower, MadNLP, ExaModels, MadNLPHSL, NLPModelsIpopt, NLPModels, Plots, LinearAlgebra
 
+BLAS.set_num_threads(1);
 model_cpu, ~ = opf_model("pglib_opf_case3_lmbd";)
-~ = ipopt(model_cpu, tol = 1e-4, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = 1e-4, linear_solver = "ma86")
+~ = madnlp(model_cpu, tol = 1e-4,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=2)
 
 m_cpu, v_cpu, c_cpu = opf_model("pglib_opf_case78484_epigrids")
-result_ma86 = ipopt(m_cpu, tol = 1e-4, max_wall_time = Float64(900), dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = 1e-4, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+
+threads = [12, 16, 20, 28]
+solve_times = Float64[]
+
+for thread in threads
+    result_ma86 = madnlp(m_cpu, tol = 1e-4,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=thread)
+    push!(solve_times, result_ma86.counters.total_time)
+end
+
+# Plot Thread Count vs Solve Time
+plot(
+    threads, solve_times,
+    marker = :o,
+    xlabel = "Number of Threads",
+    ylabel = "Solve Time (s)",
+    title = "MA86 Threads vs Solve Time",
+    legend = false,
+)
+
+savefig("thread_vs_solve_time_madnlp.png")

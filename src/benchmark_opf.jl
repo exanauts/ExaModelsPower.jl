@@ -2,7 +2,28 @@
 using MadNLPHSL, NLPModelsIpopt, NLPModels, LinearAlgebra, CSV, DataFrames, PrettyTables, Printf, Plots, SolverBenchmark, MadNCL, HybridKKT, DataStructures
 using PrettyTables: tf_latex_booktabs, LatexTableFormat
 
-
+sample_cases = ["pglib_opf_case3_lmbd", 
+"pglib_opf_case5_pjm",
+"pglib_opf_case14_ieee",
+"pglib_opf_case24_ieee_rts",
+"pglib_opf_case39_epri",
+"pglib_opf_case89_pegase",
+"pglib_opf_case197_snem",
+"pglib_opf_case500_goc",
+"pglib_opf_case1888_rte",
+"pglib_opf_case2736sp_k",
+"pglib_opf_case2848_rte",
+"pglib_opf_case3375wp_k",
+"pglib_opf_case4917_goc",
+"pglib_opf_case9241_pegase",
+"pglib_opf_case19402_goc",
+"pglib_opf_case78484_epigrids",]
+small_sample_cases = ["pglib_opf_case3_lmbd", 
+"pglib_opf_case5_pjm",
+"pglib_opf_case14_ieee",
+"pglib_opf_case24_ieee_rts",
+"pglib_opf_case39_epri",
+"pglib_opf_case89_pegase",]
 cases = [
 "pglib_opf_case3_lmbd", 
 "pglib_opf_case5_pjm",
@@ -155,8 +176,8 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
                           :termination, :obj, :cvio],
         "Ipopt+Ma86 (CPU)" => [:iter, :soltime, :adtime,
                           :termination, :obj, :cvio],
-        "Ipopt+Ma86 (CPU)" => [:iter, :soltime, :adtime,
-                          :termination, :obj, :cvio],
+        "MadNLP+Ma86 (CPU)" => [:iter, :soltime, :inittime, :adtime,
+                          :lintime, :termination, :obj, :cvio],
         "Ipopt+Ma97 (CPU)" => [:iter, :soltime, :adtime,
                           :termination, :obj, :cvio],
     )
@@ -183,10 +204,10 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         raw_row = Any[clean_case, row_top.nvar, row_top.ncon]
 
         methods = ["MadNLP+LiftedKKT (GPU)", "MadNLP+HybridKKT (GPU)", "MadNCL (GPU)",
-            "Ipopt+Ma27 (CPU)","Ipopt+Ma86 (CPU)","Ipopt+Ma97 (CPU)"]
+            "Ipopt+Ma27 (CPU)","MadNLP+Ma86 (CPU)","Ipopt+Ma97 (CPU)"]
         for (df, method) in [(df_lifted_kkt, "MadNLP+LiftedKKT (GPU)"), (df_hybrid_kkt, "MadNLP+HybridKKT (GPU)"),
                             (df_madncl, "MadNCL (GPU)"), (df_ma27, "Ipopt+Ma27 (CPU)"),
-                            (df_ma86, "Ipopt+Ma86 (CPU)"), (df_ma97, "Ipopt+Ma97 (CPU)")]
+                            (df_ma86, "MadNLP+Ma86 (CPU)"), (df_ma97, "Ipopt+Ma97 (CPU)")]
             df_row = df[i, :]
             for field in subs[method]
                 val = get(df_row, field, missing)
@@ -329,7 +350,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         ("MadNLP+HybridKKT (GPU)", df_hybrid_kkt),
         ("MadNCL (GPU)", df_madncl),
         ("Ipopt+Ma27 (CPU)", df_ma27),
-        ("Ipopt+Ma86 (CPU)", df_ma86),
+        ("MadNLP+Ma86 (CPU)", df_ma86),
         ("Ipopt+Ma97 (CPU)", df_ma97)
     ]
         nv = Float64[]
@@ -372,7 +393,7 @@ function generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_m
         :hybrid_kkt => "MadNLP+HybridKKT (GPU)",
         :madncl => "MadNCL (GPU)",
         :ma27 => "Ipopt+Ma27 (CPU)",
-        :ma86 => "Ipopt+Ma86 (CPU)",
+        :ma86 => "MadNLP+Ma86 (CPU)",
         :ma97 => "Ipopt+Ma97 (CPU)"
     )
 
@@ -381,7 +402,7 @@ function generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_m
          "MadNLP+HybridKKT (GPU)" => :hybrid_kkt,
          "MadNCL (GPU)" => :madncl,
          "Ipopt+Ma27 (CPU)" => :ma27,
-         "Ipopt+Ma86 (CPU)" => :ma86 ,
+         "MadNLP+Ma86 (CPU)" => :ma86 ,
          "Ipopt+Ma97 (CPU)" => :ma97
     )
 
@@ -392,7 +413,7 @@ function generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_m
         :hybrid_kkt => [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio],
         :madncl => [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio],
         :ma27 => [:iter, :soltime, :adtime, :termination, :obj, :cvio],
-        :ma86 => [:iter, :soltime, :adtime, :termination, :obj, :cvio],
+        :ma86 => [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio],
         :ma97 => [:iter, :soltime, :adtime, :termination, :obj, :cvio]
     )
 
@@ -558,25 +579,20 @@ function solve_static_cases(cases, tol, coords; case_style = "default")
     model_gpu, ~ = opf_model("pglib_opf_case3_lmbd"; backend = CUDABackend(), form=form)
     ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
     ~ = MadNCL.madncl(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true)
-    ~ = madnlp(model_gpu, tol = tol, max_iter = 3, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
-                cudss_algorithm=MadNLP.LDL,
-                kkt_system=HybridKKT.HybridCondensedKKTSystem,
-                equality_treatment=MadNLP.EnforceEquality,
-                fixed_variable_treatment=MadNLP.MakeParameter,)
+    ~ = madnlp(model_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                        cudss_algorithm=MadNLP.LDL,
+                                        kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                        equality_treatment=MadNLP.EnforceEquality,
+                                        fixed_variable_treatment=MadNLP.MakeParameter, max_iter = 3)
+    
 
     model_cpu, ~ = opf_model("pglib_opf_case3_lmbd"; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
-    #=~ = madnlp(model_cpu; tol=tol, max_wall_time=max_wall_time, disable_garbage_collector=true, 
-        kkt_system=MadNLP.SparseCondensedKKTSystem,
-        dual_initialized=true,
-        equality_treatment=MadNLP.RelaxEquality,
-        fixed_variable_treatment=MadNLP.RelaxBound,
-        linear_solver=Ma86Solver,
-        ma86_num_threads=8,
-        max_iter = 3
-        )=#
+    ~ = madnlp(model_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14, max_iter = 3)
 
 
 
@@ -588,7 +604,7 @@ function solve_static_cases(cases, tol, coords; case_style = "default")
     df_madncl = similar(df_lifted_kkt)
 
     df_ma27 = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
-    df_ma86 = similar(df_ma27)
+    df_ma86 = similar(df_lifted_kkt)
     df_ma97 = similar(df_ma27)
 
     for (i, case) in enumerate(cases)
@@ -664,24 +680,13 @@ function solve_static_cases(cases, tol, coords; case_style = "default")
         c = evaluate(m_cpu, result_ma27)
         push!(df_ma27, (i, it, tot, ad, termination_code(result_ma27.solver_specific[:internal_msg]), result_ma27.objective, c))
 
-        result_ma86 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
-        it, tot, ad = ipopt_stats("ipopt_output")
-        c = evaluate(m_cpu, result_ma86)
-        push!(df_ma86, (i, it, tot, ad, termination_code(result_ma86.solver_specific[:internal_msg]), result_ma86.objective, c))
-
-        #Use this code to check ma86 on madnlp
-        #=result_ma86 = madnlp(m_cpu; tol=tol, max_wall_time=max_wall_time, disable_garbage_collector=true, 
-        kkt_system=MadNLP.SparseCondensedKKTSystem,
-        dual_initialized=true,
-        equality_treatment=MadNLP.RelaxEquality,
-        fixed_variable_treatment=MadNLP.RelaxBound,
-        linear_solver=Ma86Solver,
-        ma86_num_threads=8,
-        )
+        result_ma86 = madnlp(m_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14)
         c = evaluate(m_cpu, result_ma86)
         push!(df_ma86, (i, result_ma86.counters.k, result_ma86.counters.total_time, result_ma86.counters.init_time, result_ma86.counters.eval_function_time, 
-        result_ma86.counters.linear_solver_time, termination_code(result_ma86.status), result_ma86.objective, c))
-=#
+            result_ma86.counters.linear_solver_time, termination_code(result_ma86.status), result_ma86.objective, c))
 
         result_ma97 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
         it, tot, ad = ipopt_stats("ipopt_output")
@@ -697,7 +702,7 @@ function solve_static_cases(cases, tol, coords; case_style = "default")
                 :ma86 => df_ma86,
                 :ma97 => df_ma97)
     
-    generate_tex_opf(opf_results, coords; filename = "saved_data/benchmark_results_opf_" * case_style * "_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*"_"*coords*".tex")
+    generate_tex_opf(opf_results, coords; filename = "select_saved_data/benchmark_results_opf_" * case_style * "_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*"_"*coords*".tex")
 
     return opf_results
 end
@@ -742,9 +747,9 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
     df_ma27_medium = similar(df_ma27_easy)
     df_ma27_hard = similar(df_ma27_easy)
 
-    df_ma86_easy = similar(df_ma27_easy)
-    df_ma86_medium = similar(df_ma27_easy)
-    df_ma86_hard = similar(df_ma27_easy)
+    df_ma86_easy = similar(df_lifted_kkt_easy)
+    df_ma86_medium = similar(df_lifted_kkt_easy)
+    df_ma86_hard = similar(df_lifted_kkt_easy)
 
     df_ma97_easy = similar(df_ma27_easy)
     df_ma97_medium = similar(df_ma27_easy)
@@ -770,7 +775,10 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
 
     model_cpu, ~ = mpopf_model(test_case, [1,1,1]; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = madnlp(model_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14, max_iter = 3)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
 
 
@@ -861,10 +869,13 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
             c = evaluate(m_cpu, result_ma27)
             row_ma27 = (i, it, tot, ad, termination_code(result_ma27.solver_specific[:internal_msg]),  result_ma27.objective, c)
 
-            result_ma86 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
-            it, tot, ad = ipopt_stats("ipopt_output")
+            result_ma86 = madnlp(m_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14)
             c = evaluate(m_cpu, result_ma86)
-            row_ma86 = (i, it, tot, ad, termination_code(result_ma86.solver_specific[:internal_msg]),  result_ma86.objective, c)
+            row_ma86 = (i, result_ma86.counters.k, result_ma86.counters.total_time, result_ma86.counters.init_time, result_ma86.counters.eval_function_time,
+                    result_ma86.counters.linear_solver_time, termination_code(result_ma86.status), result_ma86.objective, c)
 
             result_ma97 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
             it, tot, ad = ipopt_stats("ipopt_output")
@@ -923,9 +934,9 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
                 :ma97_hard => df_ma97_hard,)
     
     if !storage
-        generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "") * "_.tex")
+        generate_tex_mpopf(mpopf_results, coords; filename="select_saved_data/benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "") * "_.tex")
     else
-        generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_mpopf_storage_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "") * "_.tex")
+        generate_tex_mpopf(mpopf_results, coords; filename="select_saved_data/benchmark_results_mpopf_storage_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "") * "_.tex")
     end
     return mpopf_results
 end
@@ -1011,15 +1022,24 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
 
     model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = madnlp(model_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14, max_iter = 3)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
     model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1]; form=form, storage_complementarity_constraint = true)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = madnlp(model_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14, max_iter = 3)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
     model_cpu, ~ = mpopf_model("pglib_opf_case3_lmbd_storage.m", [1,1,1], example_func; form=form)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = madnlp(model_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14, max_iter = 3)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
 
     for (i, case) in enumerate(cases)
@@ -1104,10 +1124,13 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
         row_ma27_no_cmp = (i, it, tot, ad, termination_code(result_ma27_no_cmp.solver_specific[:internal_msg]),  result_ma27_no_cmp.objective, c)
         push!(df_ma27_no_cmp, row_ma27_no_cmp)
 
-        result_ma86_no_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
-        it, tot, ad = ipopt_stats("ipopt_output")
+        result_ma86_no_cmp = madnlp(m_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14)
         c = evaluate(m_cpu, result_ma86_no_cmp)
-        row_ma86_no_cmp = (i, it, tot, ad, termination_code(result_ma86_no_cmp.solver_specific[:internal_msg]),  result_ma86_no_cmp.objective, c)
+        row_ma86_no_cmp = row_madncl_no_cmp = (i, result_ma86_no_cmp.counters.k, result_ma86_no_cmp.counters.total_time, result_ma86_no_cmp.counters.init_time, result_ma86_no_cmp.counters.eval_function_time,
+                    result_ma86_no_cmp.counters.linear_solver_time, termination_code(result_ma86_no_cmp.status), result_ma86_no_cmp.objective, c)
         push!(df_ma86_no_cmp, row_ma86_no_cmp)
 
         result_ma97_no_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
@@ -1180,10 +1203,13 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
         row_ma27_cmp = (i, it, tot, ad, termination_code(result_ma27_cmp.solver_specific[:internal_msg]),  result_ma27_cmp.objective, c)
         push!(df_ma27_cmp, row_ma27_cmp)
 
-        result_ma86_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
-        it, tot, ad = ipopt_stats("ipopt_output")
+        result_ma86_cmp = madnlp(m_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14)
         c = evaluate(m_cpu, result_ma86_cmp)
-        row_ma86_cmp = (i, it, tot, ad, termination_code(result_ma86_cmp.solver_specific[:internal_msg]),  result_ma86_cmp.objective, c)
+        row_ma86_cmp = (i, result_ma86_cmp.counters.k, result_ma86_cmp.counters.total_time, result_ma86_cmp.counters.init_time, result_ma86_cmp.counters.eval_function_time,
+                    result_ma86_cmp.counters.linear_solver_time, termination_code(result_ma86_cmp.status), result_ma86_cmp.objective, c)
         push!(df_ma86_cmp, row_ma86_cmp)
 
         result_ma97_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
@@ -1256,10 +1282,13 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
         row_ma27_nl_cmp = (i, it, tot, ad, termination_code(result_ma27_nl_cmp.solver_specific[:internal_msg]),  result_ma27_nl_cmp.objective, c)
         push!(df_ma27_nl_cmp, row_ma27_nl_cmp)
 
-        result_ma86_nl_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
-        it, tot, ad = ipopt_stats("ipopt_output")
+        result_ma86_nl_cmp = madnlp(m_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14)
         c = evaluate(m_cpu, result_ma86_nl_cmp)
-        row_ma86_nl_cmp = (i, it, tot, ad, termination_code(result_ma86_nl_cmp.solver_specific[:internal_msg]),  result_ma86_nl_cmp.objective, c)
+        row_ma86_nl_cmp = (i, result_ma86_nl_cmp.counters.k, result_ma86_nl_cmp.counters.total_time, result_ma86_nl_cmp.counters.init_time, result_ma86_nl_cmp.counters.eval_function_time,
+                    result_ma86_nl_cmp.counters.linear_solver_time, termination_code(result_ma86_nl_cmp.status), result_ma86_nl_cmp.objective, c)
         push!(df_ma86_nl_cmp, row_ma86_nl_cmp)
 
         result_ma97_nl_cmp = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
@@ -1295,12 +1324,12 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
                 :ma97_cmp => df_ma97_cmp,
                 :ma97_nl_cmp => df_ma97_nl_cmp,)
     
-    generate_tex_mpopf(stor_results, coords; filename="benchmark_results_mpopf_storage_comps_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex", levels = [:no_cmp, :cmp, :nl_cmp])
+    generate_tex_mpopf(stor_results, coords; filename="select_saved_data/benchmark_results_mpopf_storage_comps_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex", levels = [:no_cmp, :cmp, :nl_cmp])
     return stor_results
 end
 
 sc_cases = [("data/C3E4N00073D1_scenario_303.json", "data/C3E4N00073D1_scenario_303_solution.json"),
-]#("data/C3E4N00073D3_scenario_303.json", "data/C3E4N00073D3_scenario_303_solution.json")]
+("data/C3E4N00073D2_scenario_303.json", "data/C3E4N00073D2_scenario_303_solution.json")]#("data/C3E4N00073D3_scenario_303.json", "data/C3E4N00073D3_scenario_303_solution.json")]
 
 function solve_sc_cases(cases, tol, include_ctg)
 
@@ -1332,7 +1361,10 @@ function solve_sc_cases(cases, tol, include_ctg)
 
     model_cpu, ~ = scopf_model(test_case, test_uc_case; include_ctg = include_ctg)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-    ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86")
+    ~ = madnlp(model_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14, max_iter = 3)
     ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
    
 
@@ -1397,10 +1429,13 @@ function solve_sc_cases(cases, tol, include_ctg)
         c = evaluate(m_cpu, result_ma27)
         push!(df_ma27, (i, it, tot, ad, termination_code(result_ma27.solver_specific[:internal_msg]), result_ma27.objective, c))
 
-        result_ma86 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma86", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
-        it, tot, ad = ipopt_stats("ipopt_output")
+        result_ma86 = madnlp(m_cpu, tol = tol,
+            kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
+            fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
+            linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=14)
         c = evaluate(m_cpu, result_ma86)
-        push!(df_ma86, (i, it, tot, ad, termination_code(result_ma86.solver_specific[:internal_msg]), result_ma86.objective, c))
+        push!(df_ma86, (i, result_ma86.counters.k, result_ma86.counters.total_time, result_ma86.counters.init_time, result_ma86.counters.eval_function_time, 
+            result_ma86.counters.linear_solver_time, termination_code(result_ma86.status), result_ma86.objective, c))
 
         result_ma97 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
         it, tot, ad = ipopt_stats("ipopt_output")
@@ -1423,7 +1458,7 @@ function solve_sc_cases(cases, tol, include_ctg)
         coords = "no_contingency"
     end
  
-    generate_tex_opf(scopf_results, coords; filename="benchmark_results_scopf_" *coords*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    generate_tex_opf(scopf_results, coords; filename="select_saved_data/benchmark_results_scopf_" *coords*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
    
     return scopf_results
 end
