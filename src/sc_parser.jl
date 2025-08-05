@@ -995,6 +995,7 @@ function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
     for line in uc_data["time_series_output"]["simple_dispatchable_device"]
         solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to j_prcs
         if solution_index > L_J_pr
+            #This section corresponds to consuming devices
             solution_index -= L_J_pr
             line["p_syn_res"] = Array(solution(result, vars.p_jt_scr_cs))[solution_index,:]
             line["p_ramp_res_up_online"] = Array(solution(result, vars.p_jt_rru_on_cs))[solution_index,:]
@@ -1009,6 +1010,7 @@ function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
             line["q_res_up"] = Array(solution(result, vars.q_jt_qru_cs))[solution_index,:]
             line["p_ramp_res_down_offline"] = Array(solution(result, vars.p_jt_rrd_off_cs))[solution_index,:]
         else
+            #Producing devices
             line["p_syn_res"] = Array(solution(result, vars.p_jt_scr_pr))[solution_index,:]
             line["p_ramp_res_up_online"] = Array(solution(result, vars.p_jt_rru_on_pr))[solution_index,:]
             line["p_nsyn_res"] = Array(solution(result, vars.p_jt_nsc_pr))[solution_index,:]
