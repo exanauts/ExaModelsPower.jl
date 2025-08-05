@@ -5,8 +5,8 @@ using PrettyTables: tf_latex_booktabs, LatexTableFormat
 
 cases = [
 "pglib_opf_case3_lmbd", 
-"pglib_opf_case5_pjm",]
-#="pglib_opf_case14_ieee",
+"pglib_opf_case5_pjm",
+"pglib_opf_case14_ieee",
 "pglib_opf_case24_ieee_rts",
 "pglib_opf_case30_as",
 "pglib_opf_case30_ieee",
@@ -46,7 +46,7 @@ cases = [
 "pglib_opf_case3120sp_k",
 "pglib_opf_case3375wp_k",
 "pglib_opf_case3970_goc",
-"pglib_opf_case4020_goc",]
+"pglib_opf_case4020_goc",
 "pglib_opf_case4601_goc",
 "pglib_opf_case4619_goc",
 "pglib_opf_case4661_sdet",
@@ -69,7 +69,7 @@ cases = [
 "pglib_opf_case20758_epigrids",
 "pglib_opf_case24464_goc",
 "pglib_opf_case30000_goc",
-"pglib_opf_case78484_epigrids",]=#
+"pglib_opf_case78484_epigrids",]
 
 function termination_code(status::MadNLP.Status)
     if status == MadNLP.SOLVE_SUCCEEDED
@@ -155,8 +155,8 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
                           :termination, :obj, :cvio],
         "Ipopt+Ma86 (CPU)" => [:iter, :soltime, :adtime,
                           :termination, :obj, :cvio],
-        "MadNLP+Ma86 (CPU)" => [:iter, :soltime, :inittime, :adtime,
-                            :lintime, :termination, :obj, :cvio],
+        "Ipopt+Ma86 (CPU)" => [:iter, :soltime, :adtime,
+                          :termination, :obj, :cvio],
         "Ipopt+Ma97 (CPU)" => [:iter, :soltime, :adtime,
                           :termination, :obj, :cvio],
     )
@@ -183,10 +183,10 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         raw_row = Any[clean_case, row_top.nvar, row_top.ncon]
 
         methods = ["MadNLP+LiftedKKT (GPU)", "MadNLP+HybridKKT (GPU)", "MadNCL (GPU)",
-            "Ipopt+Ma27 (CPU)","MadNLP+Ma86 (CPU)","Ipopt+Ma97 (CPU)"]
+            "Ipopt+Ma27 (CPU)","Ipopt+Ma86 (CPU)","Ipopt+Ma97 (CPU)"]
         for (df, method) in [(df_lifted_kkt, "MadNLP+LiftedKKT (GPU)"), (df_hybrid_kkt, "MadNLP+HybridKKT (GPU)"),
                             (df_madncl, "MadNCL (GPU)"), (df_ma27, "Ipopt+Ma27 (CPU)"),
-                            (df_ma86, "MadNLP+Ma86 (CPU)"), (df_ma97, "Ipopt+Ma97 (CPU)")]
+                            (df_ma86, "Ipopt+Ma86 (CPU)"), (df_ma97, "Ipopt+Ma97 (CPU)")]
             df_row = df[i, :]
             for field in subs[method]
                 val = get(df_row, field, missing)
@@ -301,7 +301,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     # Now build an ordered list of Pairs
     if !isempty(selected[:lifted_kkt])
         p = performance_profile(selected, df -> df.soltime)
-        Plots.svg(p, replace(filename, r"\.tex$" => "_small"))
+        Plots.svg(p, replace(filename, r"\.tex$" => "_medium"))
     end
 
     # Large: nvar > 20000
@@ -313,7 +313,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     # Now build an ordered list of Pairs
     if !isempty(selected[:lifted_kkt])
         p = performance_profile(selected, df -> df.soltime)
-        Plots.svg(p, replace(filename, r"\.tex$" => "_small"))
+        Plots.svg(p, replace(filename, r"\.tex$" => "_large"))
     end
 
 
@@ -329,7 +329,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         ("MadNLP+HybridKKT (GPU)", df_hybrid_kkt),
         ("MadNCL (GPU)", df_madncl),
         ("Ipopt+Ma27 (CPU)", df_ma27),
-        ("MadNLP+Ma86 (CPU)", df_ma86),
+        ("Ipopt+Ma86 (CPU)", df_ma86),
         ("Ipopt+Ma97 (CPU)", df_ma97)
     ]
         nv = Float64[]
@@ -365,29 +365,32 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
 
 end
 
-function generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_mpopf.tex")
-    levels = [:easy, :medium, :hard]
-    solvers = [:lifted_kkt, :hybrid_kkt, :ma27, :ma86, :ma97]
+function generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_mpopf.tex", levels = [:easy, :medium, :hard])
+    solvers = [:lifted_kkt, :hybrid_kkt, :madncl, :ma27, :ma86, :ma97]
     labels = Dict(
         :lifted_kkt => "MadNLP+LiftedKKT (GPU)",
         :hybrid_kkt => "MadNLP+HybridKKT (GPU)",
+        :madncl => "MadNCL (GPU)",
         :ma27 => "Ipopt+Ma27 (CPU)",
-        :ma86 => "MadNLP+Ma86 (CPU)",
+        :ma86 => "Ipopt+Ma86 (CPU)",
         :ma97 => "Ipopt+Ma97 (CPU)"
     )
 
     reverse_labels = Dict(
          "MadNLP+LiftedKKT (GPU)" => :lifted_kkt,
          "MadNLP+HybridKKT (GPU)" => :hybrid_kkt,
+         "MadNCL (GPU)" => :madncl,
          "Ipopt+Ma27 (CPU)" => :ma27,
-         "MadNLP+Ma86 (CPU)" => :ma86 ,
+         "Ipopt+Ma86 (CPU)" => :ma86 ,
          "Ipopt+Ma97 (CPU)" => :ma97
     )
 
     # Define fields
+    
     subs = Dict(
         :lifted_kkt => [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio],
         :hybrid_kkt => [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio],
+        :madncl => [:iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio],
         :ma27 => [:iter, :soltime, :adtime, :termination, :obj, :cvio],
         :ma86 => [:iter, :soltime, :adtime, :termination, :obj, :cvio],
         :ma97 => [:iter, :soltime, :adtime, :termination, :obj, :cvio]
@@ -537,202 +540,6 @@ function generate_tex_mpopf(mpopf_results, coords; filename="benchmark_results_m
 end
 
 
-function generate_tex_stor_comp(stor_results, coords, comp_names; filename="benchmark_results_mpopf_storage.tex")
-
-    df_top = stor_results[:top]
-    df_gpu_no_cmp = stor_results[:gpu_no_cmp]
-    df_gpu_cmp = stor_results[:gpu_cmp]
-    df_gpu_nl_cmp = stor_results[:gpu_nl_cmp]
-    df_cpu_no_cmp = stor_results[:cpu_no_cmp]
-    df_cpu_cmp = stor_results[:cpu_cmp]
-    df_cpu_nl_cmp = stor_results[:cpu_nl_cmp]
-
-    # --- Build dynamic method names ---
-    methods = String[]
-    for comp in comp_names
-        push!(methods, "GPU $coords $comp")
-        push!(methods, "CPU $coords $comp")
-    end
-
-    # --- Define what fields each method has ---
-    subs = Dict{String, Vector{Symbol}}()
-    for method in methods
-        if startswith(method, "GPU")
-            subs[method] = [:nvar, :ncon, :iter, :soltime, :inittime, :adtime, :lintime, :termination, :obj, :cvio]
-        elseif startswith(method, "CPU")
-            subs[method] = [:iter, :soltime, :adtime, :termination, :obj, :cvio]
-        end
-    end
-
-    # --- Format values ---
-    format_val(field, val) =
-        (val === missing || val === nothing) ? missing :
-        !(val isa Number) ? string(val) :
-        field == :iter ? string(Int(round(val))) :
-        field in [:obj, :cvio] ? @sprintf("%.6e", val) :
-        @sprintf("%.3e", round(val, sigdigits=4))
-
-    format_k(val) = isnothing(val) || val === missing ? missing : @sprintf("%.1fk", val / 1000)
-
-    # --- Construct rows ---
-    rows = Any[]
-    raw_rows = Any[]
-    for (i, row_top) in enumerate(eachrow(df_top))
-        case = row_top.case_name
-        clean_case = replace(case, r"^pglib_opf_case" => "", r"\.m$" => "")
-
-        row = Any[clean_case]#, format_k(row_top.nvar), format_k(row_top.ncon)]
-        raw_row = Any[clean_case]#, row_top.nvar, row_top.ncon]
-
-        #Easy
-        row_gpu_no_cmp = df_gpu_no_cmp[i, :]
-        for field in subs["GPU "*coords*" no cc"]
-            val = get(row_gpu_no_cmp, field, missing)
-            if field in [:nvar, :ncon]
-                push!(row, format_k(val))
-            else
-                push!(row, format_val(field, val))
-            end
-            push!(raw_row, val)
-        end
-
-        row_cpu_no_cmp = df_cpu_no_cmp[i, :]
-        for field in subs["CPU "*coords*" no cc"]
-            val = get(row_cpu_no_cmp, field, missing)
-            push!(row, format_val(field, val))
-            push!(raw_row, val)
-        end
-
-        #Medium
-        row_gpu_cmp = df_gpu_cmp[i, :]
-        for field in subs["GPU "*coords*" no cc"]
-            val = get(row_gpu_cmp, field, missing)
-            if field in [:nvar, :ncon]
-                push!(row, format_k(val))
-            else
-                push!(row, format_val(field, val))
-            end
-            push!(raw_row, val)
-        end
-
-        row_cpu_cmp = df_cpu_cmp[i, :]
-        for field in subs["CPU "*coords*" no cc"]
-            val = get(row_cpu_cmp, field, missing)
-            push!(row, format_val(field, val))
-            push!(raw_row, val)
-        end
-
-        #Hard
-        row_gpu_nl_cmp = df_gpu_nl_cmp[i, :]
-        for field in subs["GPU "*coords*" no cc"]
-            val = get(row_gpu_nl_cmp, field, missing)
-            if field in [:nvar, :ncon]
-                push!(row, format_k(val))
-            else
-                push!(row, format_val(field, val))
-            end
-            push!(raw_row, val)
-        end
-
-        row_cpu_nl_cmp = df_cpu_nl_cmp[i, :]
-        for field in subs["CPU "*coords*" no cc"]
-            val = get(row_cpu_nl_cmp, field, missing)
-            push!(row, format_val(field, val))
-            push!(raw_row, val)
-        end
-
-
-        push!(rows, row)
-        push!(raw_rows, raw_row)
-    end
-
-    table_data = permutedims(reduce(hcat, rows))
-
-    # --- Header construction ---
-    h_top    = ["Case"]
-    h_bottom = [""]
-
-    for m in methods
-        n = length(subs[m])
-        push!(h_top, m)
-        append!(h_top, fill("", n-1))
-        append!(h_bottom, string.(subs[m]))
-    end
-
-    # --- Group boundary vlines ---
-    function group_boundaries(methods, subs)
-        idx = Int[0, 1]  # vertical lines at case label and after header
-        col = 1
-        for m in methods
-            col += length(subs[m])
-            push!(idx, col)
-        end
-        return idx
-    end
-
-    vlines = group_boundaries(methods, subs)
-
-    # --- Horizontal rules every 5 rows ---
-    nrows = length(rows)
-    hlines = vcat(0, 1, collect(6:5:nrows), nrows+1)
-
-    # --- Output LaTeX ---
-    open(filename, "w") do io
-        pretty_table(
-            io, table_data;
-            header = (h_top, h_bottom),
-            backend = Val(:latex),
-            tf = tf_latex_default,
-            alignment = :c,
-            vlines = vlines,
-            hlines = hlines
-        )
-    end
-
-
-    # Write plain-text version (filename.txt)
-    txt_filename = replace(filename, r"\.tex$" => ".txt")
-    open(txt_filename, "w") do io
-        pretty_table(
-            io, table_data;
-            header = (h_top, h_bottom),
-            backend = Val(:text),
-            alignment = :c
-        )
-    end
-
-    # Write CSV version (raw values)
-    csv_filename = replace(filename, r"\.tex$" => ".csv")
-    flat_header = vcat(["Case"], vcat([
-        string(m, "_", f) for m in methods for f in subs[m]
-    ]))
-    df = DataFrame([Symbol(h) => col for (h, col) in zip(flat_header, eachcol(permutedims(reduce(hcat, raw_rows))))])
-    CSV.write(csv_filename, df)
-
-    #Make charts
-    selected = Dict(
-        :gpu_no_cmp => stor_results[:gpu_no_cmp],
-        :cpu_no_cmp => stor_results[:cpu_no_cmp],
-    )
-    p = performance_profile(selected, df -> df.soltime)
-    Plots.svg(p, replace(filename, r"\.tex$" => "_no_cmp"))
-
-    selected = Dict(
-        :gpu_cmp => stor_results[:gpu_cmp],
-        :cpu_cmp => stor_results[:cpu_cmp],
-    )
-    p = performance_profile(selected, df -> df.soltime)
-    Plots.svg(p, replace(filename, r"\.tex$" => "_cmp"))
-
-    selected = Dict(
-        :gpu_nl_cmp => stor_results[:gpu_nl_cmp],
-        :cpu_nl_cmp => stor_results[:cpu_nl_cmp],
-    )
-    p = performance_profile(selected, df -> df.soltime)
-    Plots.svg(p, replace(filename, r"\.tex$" => "_nl_cmp"))
-
-
-end
 
 
 function solve_static_cases(cases, tol, coords; case_style = "default")
@@ -992,28 +799,58 @@ function solve_mp_cases(cases, curves, tol, coords; case_style = "default", stor
         for (curve_name, curve) in curves            
 
             #GPU
-            m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form)   
-            result_lifted_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form)  
+            
+            row_lifted_kkt = nothing
+            try 
+                result_lifted_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
 
-            c = evaluate(m_gpu, result_lifted_kkt)        
+                c = evaluate(m_gpu, result_lifted_kkt)        
 
-            row_lifted_kkt = (i, result_lifted_kkt.counters.k, result_lifted_kkt.counters.total_time, result_lifted_kkt.counters.init_time, result_lifted_kkt.counters.eval_function_time,
-                result_lifted_kkt.counters.linear_solver_time, termination_code(result_lifted_kkt.status), result_lifted_kkt.objective, c)
+                row_lifted_kkt = (i, result_lifted_kkt.counters.k, result_lifted_kkt.counters.total_time, result_lifted_kkt.counters.init_time, result_lifted_kkt.counters.eval_function_time,
+                    result_lifted_kkt.counters.linear_solver_time, termination_code(result_lifted_kkt.status), result_lifted_kkt.objective, c)
+            catch e
+                if occursin("Out of GPU memory", sprint(showerror, e))
+                    @warn "GPU OOM on this problem, skipping..."
+                    row_lifted_kkt = (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+                else
+                    rethrow(e)
+                end
+            end
 
-            result_hybrid_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
-                                    cudss_algorithm=MadNLP.LDL,
-                                    kkt_system=HybridKKT.HybridCondensedKKTSystem,
-                                    equality_treatment=MadNLP.EnforceEquality,
-                                    fixed_variable_treatment=MadNLP.MakeParameter,)
-            c = evaluate(m_gpu, result_hybrid_kkt)
-            row_hybrid_kkt = (i, result_hybrid_kkt.counters.k, result_hybrid_kkt.counters.total_time, result_hybrid_kkt.counters.init_time, result_hybrid_kkt.counters.eval_function_time,
-                result_hybrid_kkt.counters.linear_solver_time, termination_code(result_hybrid_kkt.status), result_hybrid_kkt.objective, c)
+            row_hybrid_kkt = nothing
+            try 
+                result_hybrid_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                        cudss_algorithm=MadNLP.LDL,
+                                        kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                        equality_treatment=MadNLP.EnforceEquality,
+                                        fixed_variable_treatment=MadNLP.MakeParameter,)
+                c = evaluate(m_gpu, result_hybrid_kkt)
+                row_hybrid_kkt = (i, result_hybrid_kkt.counters.k, result_hybrid_kkt.counters.total_time, result_hybrid_kkt.counters.init_time, result_hybrid_kkt.counters.eval_function_time,
+                    result_hybrid_kkt.counters.linear_solver_time, termination_code(result_hybrid_kkt.status), result_hybrid_kkt.objective, c)
+            catch e
+                if occursin("Out of GPU memory", sprint(showerror, e))
+                    @warn "GPU OOM on this problem, skipping..."
+                    row_hybrid_kkt = (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+                else
+                    rethrow(e)
+                end
+            end
 
-            result_madncl = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-            c = evaluate(m_gpu, result_madncl)
-            row_madncl = (i, result_madncl.counters.k, result_madncl.counters.total_time, result_madncl.counters.init_time, result_madncl.counters.eval_function_time,
-                result_madncl.counters.linear_solver_time, termination_code(result_madncl.status), result_madncl.objective, c)
-
+            row_madncl = nothing
+            try
+                result_madncl = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+                c = evaluate(m_gpu, result_madncl)
+                row_madncl = (i, result_madncl.counters.k, result_madncl.counters.total_time, result_madncl.counters.init_time, result_madncl.counters.eval_function_time,
+                    result_madncl.counters.linear_solver_time, termination_code(result_madncl.status), result_madncl.objective, c)
+            catch e
+                if occursin("Out of GPU memory", sprint(showerror, e))
+                    @warn "GPU OOM on this problem, skipping..."
+                    row_madncl = (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+                else
+                    rethrow(e)
+                end
+            end
 
 
             #CPU
@@ -1111,7 +948,7 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
         error("Wrong coords")
     end
 
-    df_top = DataFrame(case_name = String[])
+    df_top = DataFrame(case_name = String[], nvar = Int[], ncon = Int[], id = Int[])
 
     df_top_no_cmp = DataFrame(nvar = Int[], ncon = Int[], id = Int[])
     df_top_cmp = similar(df_top_no_cmp)
@@ -1202,29 +1039,60 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
         
         #No complementarity constraint
         m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form)   
-        
-        result_lifted_kkt_no_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_lifted_kkt_no_cmp)        
-        row_lifted_kkt_no_cmp = (i, result_lifted_kkt_no_cmp.counters.k, result_lifted_kkt_no_cmp.counters.total_time, result_lifted_kkt_no_cmp.counters.init_time, result_lifted_kkt_no_cmp.counters.eval_function_time,
-            result_lifted_kkt_no_cmp.counters.linear_solver_time, termination_code(result_lifted_kkt_no_cmp.status), result_lifted_kkt_no_cmp.objective, c)
-        push!(df_top, (case,))
+        push!(df_top, (case, m_gpu.meta.nvar, m_gpu.meta.ncon, i))
         push!(df_top_no_cmp, (m_gpu.meta.nvar, m_gpu.meta.ncon, i))
+
+        row_lifted_kkt_no_cmp = nothing
+        try
+            result_lifted_kkt_no_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_lifted_kkt_no_cmp)        
+            row_lifted_kkt_no_cmp = (i, result_lifted_kkt_no_cmp.counters.k, result_lifted_kkt_no_cmp.counters.total_time, result_lifted_kkt_no_cmp.counters.init_time, result_lifted_kkt_no_cmp.counters.eval_function_time,
+                result_lifted_kkt_no_cmp.counters.linear_solver_time, termination_code(result_lifted_kkt_no_cmp.status), result_lifted_kkt_no_cmp.objective, c)
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                row_lifted_kkt_no_cmp = (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+            else
+                rethrow(e)
+            end
+        end
+        
         push!(df_lifted_kkt_no_cmp, row_lifted_kkt_no_cmp)
 
-        result_hybrid_kkt_no_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
-                                            cudss_algorithm=MadNLP.LDL,
-                                            kkt_system=HybridKKT.HybridCondensedKKTSystem,
-                                            equality_treatment=MadNLP.EnforceEquality,
-                                            fixed_variable_treatment=MadNLP.MakeParameter,)
-        c = evaluate(m_gpu, result_hybrid_kkt_no_cmp)
-        row_hybrid_kkt_no_cmp = (i, result_hybrid_kkt_no_cmp.counters.k, result_hybrid_kkt_no_cmp.counters.total_time, result_hybrid_kkt_no_cmp.counters.init_time, result_hybrid_kkt_no_cmp.counters.eval_function_time,
-            result_hybrid_kkt_no_cmp.counters.linear_solver_time, termination_code(result_hybrid_kkt_no_cmp.status), result_hybrid_kkt_no_cmp.objective, c)
+        row_hybrid_kkt_no_cmp = nothing
+        try
+            result_hybrid_kkt_no_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                                cudss_algorithm=MadNLP.LDL,
+                                                kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                                equality_treatment=MadNLP.EnforceEquality,
+                                                fixed_variable_treatment=MadNLP.MakeParameter,)
+            c = evaluate(m_gpu, result_hybrid_kkt_no_cmp)
+            row_hybrid_kkt_no_cmp = (i, result_hybrid_kkt_no_cmp.counters.k, result_hybrid_kkt_no_cmp.counters.total_time, result_hybrid_kkt_no_cmp.counters.init_time, result_hybrid_kkt_no_cmp.counters.eval_function_time,
+                result_hybrid_kkt_no_cmp.counters.linear_solver_time, termination_code(result_hybrid_kkt_no_cmp.status), result_hybrid_kkt_no_cmp.objective, c)
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                row_hybrid_kkt_no_cmp =  (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+            else
+                rethrow(e)
+            end
+        end
         push!(df_hybrid_kkt_no_cmp, row_hybrid_kkt_no_cmp)
 
-        result_madncl_no_cmp = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_madncl_no_cmp)
-        row_madncl_no_cmp = (i, result_madncl_no_cmp.counters.k, result_madncl_no_cmp.counters.total_time, result_madncl_no_cmp.counters.init_time, result_madncl_no_cmp.counters.eval_function_time,
-                result_madncl_no_cmp.counters.linear_solver_time, termination_code(result_madncl_no_cmp.status), result_madncl_no_cmp.objective, c)
+        row_madncl_no_cmp = nothing
+        try
+            result_madncl_no_cmp = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_madncl_no_cmp)
+            row_madncl_no_cmp = (i, result_madncl_no_cmp.counters.k, result_madncl_no_cmp.counters.total_time, result_madncl_no_cmp.counters.init_time, result_madncl_no_cmp.counters.eval_function_time,
+                    result_madncl_no_cmp.counters.linear_solver_time, termination_code(result_madncl_no_cmp.status), result_madncl_no_cmp.objective, c)
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                row_madncl_no_cmp =  (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+            else
+                rethrow(e)
+            end
+        end
         push!(df_madncl_no_cmp, row_madncl_no_cmp)
 
 
@@ -1250,28 +1118,58 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
 
         #Complementarity constraint enforced
         m_gpu, v_gpu, c_gpu = mpopf_model(case, curve; backend = CUDABackend(), form=form, storage_complementarity_constraint = true)   
-        
-        result_lifted_kkt_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_lifted_kkt_cmp)        
-        row_lifted_kkt_cmp = (i, result_lifted_kkt_cmp.counters.k, result_lifted_kkt_cmp.counters.total_time, result_lifted_kkt_cmp.counters.init_time, result_lifted_kkt_cmp.counters.eval_function_time,
-            result_lifted_kkt_cmp.counters.linear_solver_time, termination_code(result_lifted_kkt_cmp.status), result_lifted_kkt_cmp.objective, c)
-        push!(df_lifted_kkt_cmp, row_lifted_kkt_cmp)
         push!(df_top_cmp, (m_gpu.meta.nvar, m_gpu.meta.ncon, i))
 
-        result_hybrid_kkt_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
-                                            cudss_algorithm=MadNLP.LDL,
-                                            kkt_system=HybridKKT.HybridCondensedKKTSystem,
-                                            equality_treatment=MadNLP.EnforceEquality,
-                                            fixed_variable_treatment=MadNLP.MakeParameter,)
-        c = evaluate(m_gpu, result_hybrid_kkt_cmp)
-        row_hybrid_kkt_cmp = (i, result_hybrid_kkt_cmp.counters.k, result_hybrid_kkt_cmp.counters.total_time, result_hybrid_kkt_cmp.counters.init_time, result_hybrid_kkt_cmp.counters.eval_function_time,
-            result_hybrid_kkt_cmp.counters.linear_solver_time, termination_code(result_hybrid_kkt_cmp.status), result_hybrid_kkt_cmp.objective, c)
+        row_lifted_kkt_cmp = nothing
+        try
+            result_lifted_kkt_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_lifted_kkt_cmp)        
+            row_lifted_kkt_cmp = (i, result_lifted_kkt_cmp.counters.k, result_lifted_kkt_cmp.counters.total_time, result_lifted_kkt_cmp.counters.init_time, result_lifted_kkt_cmp.counters.eval_function_time,
+                result_lifted_kkt_cmp.counters.linear_solver_time, termination_code(result_lifted_kkt_cmp.status), result_lifted_kkt_cmp.objective, c)
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                row_lifted_kkt_cmp =  (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+            else
+                rethrow(e)
+            end
+        end
+        push!(df_lifted_kkt_cmp, row_lifted_kkt_cmp)
+        
+        row_hybrid_kkt_cmp = nothing
+        try
+            result_hybrid_kkt_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                                cudss_algorithm=MadNLP.LDL,
+                                                kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                                equality_treatment=MadNLP.EnforceEquality,
+                                                fixed_variable_treatment=MadNLP.MakeParameter,)
+            c = evaluate(m_gpu, result_hybrid_kkt_cmp)
+            row_hybrid_kkt_cmp = (i, result_hybrid_kkt_cmp.counters.k, result_hybrid_kkt_cmp.counters.total_time, result_hybrid_kkt_cmp.counters.init_time, result_hybrid_kkt_cmp.counters.eval_function_time,
+                result_hybrid_kkt_cmp.counters.linear_solver_time, termination_code(result_hybrid_kkt_cmp.status), result_hybrid_kkt_cmp.objective, c)
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                row_hybrid_kkt_cmp =  (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+            else
+                rethrow(e)
+            end
+        end
         push!(df_hybrid_kkt_cmp, row_hybrid_kkt_cmp)
 
-        result_madncl_cmp = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_madncl_cmp)
-        row_madncl_cmp = (i, result_madncl_cmp.counters.k, result_madncl_cmp.counters.total_time, result_madncl_cmp.counters.init_time, result_madncl_cmp.counters.eval_function_time,
-                result_madncl_cmp.counters.linear_solver_time, termination_code(result_madncl_cmp.status), result_madncl_cmp.objective, c)
+        row_madncl_cmp = nothing
+        try
+            result_madncl_cmp = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_madncl_cmp)
+            row_madncl_cmp = (i, result_madncl_cmp.counters.k, result_madncl_cmp.counters.total_time, result_madncl_cmp.counters.init_time, result_madncl_cmp.counters.eval_function_time,
+                    result_madncl_cmp.counters.linear_solver_time, termination_code(result_madncl_cmp.status), result_madncl_cmp.objective, c)
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                row_madncl_cmp =  (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+            else
+                rethrow(e)
+            end
+        end
         push!(df_madncl_cmp, row_madncl_cmp)
 
         m_cpu, v_cpu, c_cpu = mpopf_model(case, curve; form = form, storage_complementarity_constraint=true)
@@ -1296,28 +1194,58 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
 
         #Replace piecewise complementarity constraint with NL smooth function
         m_gpu, v_gpu, c_gpu = mpopf_model(case, curve, example_func; backend = CUDABackend(), form=form)   
-        
-        result_lifted_kkt_nl_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_lifted_kkt_nl_cmp)        
-        row_lifted_kkt_nl_cmp = (i, result_lifted_kkt_nl_cmp.counters.k, result_lifted_kkt_nl_cmp.counters.total_time, result_lifted_kkt_nl_cmp.counters.init_time, result_lifted_kkt_nl_cmp.counters.eval_function_time,
-            result_lifted_kkt_nl_cmp.counters.linear_solver_time, termination_code(result_lifted_kkt_nl_cmp.status), result_lifted_kkt_nl_cmp.objective, c)
-        push!(df_lifted_kkt_nl_cmp, row_lifted_kkt_nl_cmp)
         push!(df_top_nl_cmp, (m_gpu.meta.nvar, m_gpu.meta.ncon, i))
 
-        result_hybrid_kkt_nl_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
-                                            cudss_algorithm=MadNLP.LDL,
-                                            kkt_system=HybridKKT.HybridCondensedKKTSystem,
-                                            equality_treatment=MadNLP.EnforceEquality,
-                                            fixed_variable_treatment=MadNLP.MakeParameter,)
-        c = evaluate(m_gpu, result_hybrid_kkt_nl_cmp)
-        row_hybrid_kkt_nl_cmp = (i, result_hybrid_kkt_nl_cmp.counters.k, result_hybrid_kkt_nl_cmp.counters.total_time, result_hybrid_kkt_nl_cmp.counters.init_time, result_hybrid_kkt_nl_cmp.counters.eval_function_time,
-            result_hybrid_kkt_nl_cmp.counters.linear_solver_time, termination_code(result_hybrid_kkt_nl_cmp.status), result_hybrid_kkt_nl_cmp.objective, c)
+        row_lifted_kkt_nl_cmp = nothing
+        try
+            result_lifted_kkt_nl_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_lifted_kkt_nl_cmp)        
+            row_lifted_kkt_nl_cmp = (i, result_lifted_kkt_nl_cmp.counters.k, result_lifted_kkt_nl_cmp.counters.total_time, result_lifted_kkt_nl_cmp.counters.init_time, result_lifted_kkt_nl_cmp.counters.eval_function_time,
+                result_lifted_kkt_nl_cmp.counters.linear_solver_time, termination_code(result_lifted_kkt_nl_cmp.status), result_lifted_kkt_nl_cmp.objective, c)
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                row_lifted_kkt_nl_cmp =  (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+            else
+                rethrow(e)
+            end
+        end
+        push!(df_lifted_kkt_nl_cmp, row_lifted_kkt_nl_cmp)
+        
+        row_hybrid_kkt_nl_cmp = nothing
+        try
+            result_hybrid_kkt_nl_cmp = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                                cudss_algorithm=MadNLP.LDL,
+                                                kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                                equality_treatment=MadNLP.EnforceEquality,
+                                                fixed_variable_treatment=MadNLP.MakeParameter,)
+            c = evaluate(m_gpu, result_hybrid_kkt_nl_cmp)
+            row_hybrid_kkt_nl_cmp = (i, result_hybrid_kkt_nl_cmp.counters.k, result_hybrid_kkt_nl_cmp.counters.total_time, result_hybrid_kkt_nl_cmp.counters.init_time, result_hybrid_kkt_nl_cmp.counters.eval_function_time,
+                result_hybrid_kkt_nl_cmp.counters.linear_solver_time, termination_code(result_hybrid_kkt_nl_cmp.status), result_hybrid_kkt_nl_cmp.objective, c)
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                row_hybrid_kkt_nl_cmp =  (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+            else
+                rethrow(e)
+            end
+        end
         push!(df_hybrid_kkt_nl_cmp, row_hybrid_kkt_nl_cmp)
 
-        result_madncl_nl_cmp = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_madncl_nl_cmp)
-        row_madncl_nl_cmp = (i, result_madncl_nl_cmp.counters.k, result_madncl_nl_cmp.counters.total_time, result_madncl_nl_cmp.counters.init_time, result_madncl_nl_cmp.counters.eval_function_time,
-                result_madncl_nl_cmp.counters.linear_solver_time, termination_code(result_madncl_nl_cmp.status), result_madncl_nl_cmp.objective, c)
+        row_madncl_nl_cmp = nothing
+        try
+            result_madncl_nl_cmp = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_madncl_nl_cmp)
+            row_madncl_nl_cmp = (i, result_madncl_nl_cmp.counters.k, result_madncl_nl_cmp.counters.total_time, result_madncl_nl_cmp.counters.init_time, result_madncl_nl_cmp.counters.eval_function_time,
+                    result_madncl_nl_cmp.counters.linear_solver_time, termination_code(result_madncl_nl_cmp.status), result_madncl_nl_cmp.objective, c)
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                row_madncl_nl_cmp =  (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999)
+            else
+                rethrow(e)
+            end
+        end
         push!(df_madncl_nl_cmp, row_madncl_nl_cmp)
 
         m_cpu, v_cpu, c_cpu = mpopf_model(case, curve, example_func; form = form)
@@ -1345,9 +1273,9 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
     comp_names = ["no cc", "cc", "nl cc"]
 
     stor_results = Dict(:top => df_top,
-                :top_no_cmp => df_top_no_cmp,
-                :top_cmp => df_top_cmp,
-                :top_nl_cmp => df_top_nl_cmp,
+                #:top_no_cmp => df_top_no_cmp,
+                #:top_cmp => df_top_cmp,
+                #:top_nl_cmp => df_top_nl_cmp,
                 :lifted_kkt_no_cmp => df_lifted_kkt_no_cmp,
                 :lifted_kkt_cmp => df_lifted_kkt_cmp,
                 :lifted_kkt_nl_cmp => df_lifted_kkt_nl_cmp,
@@ -1367,7 +1295,7 @@ function solve_stor_cases_comp(cases, tol, coords; case_style = "default", curve
                 :ma97_cmp => df_ma97_cmp,
                 :ma97_nl_cmp => df_ma97_nl_cmp,)
     
-    #generate_tex_stor_comp(stor_results, coords, comp_names; filename="benchmark_results_mpopf_storage_comps_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    generate_tex_mpopf(stor_results, coords; filename="benchmark_results_mpopf_storage_comps_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex", levels = [:no_cmp, :cmp, :nl_cmp])
     return stor_results
 end
 
@@ -1380,9 +1308,12 @@ function solve_sc_cases(cases, tol, include_ctg)
 
     df_lifted_kkt = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
         termination = String[], obj = Float64[], cvio = Float64[])
+    df_hybrid_kkt = similar(df_lifted_kkt)
+    df_madncl = similar(df_lifted_kkt)
 
-    df_cpu = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
-
+    df_ma27 = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
+    df_ma86 = similar(df_ma27)
+    df_ma97 = similar(df_ma27)
 
     #Compile time on smallest case
     
@@ -1410,27 +1341,53 @@ function solve_sc_cases(cases, tol, include_ctg)
         #GPU
         (problem_case, uc_case) = case
         m_gpu, v_gpu, c_gpu = scopf_model(problem_case, uc_case; backend = CUDABackend(), include_ctg = include_ctg)   
+        push!(df_top, (m_gpu.meta.nvar, m_gpu.meta.ncon, replace(problem_case, r"^data/|\.json$" => "")))
 
-        result_lifted_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_lifted_kkt)
-        push!(df_lifted_kkt, (i, result_lifted_kkt.counters.k, result_lifted_kkt.counters.total_time, result_lifted_kkt.counters.init_time, result_lifted_kkt.counters.eval_function_time, 
-        result_lifted_kkt.counters.linear_solver_time, termination_code(result_lifted_kkt.status), result_lifted_kkt.objective, c))
-        push!(df_top, (m_gpu.meta.nvar, m_gpu.meta.ncon, case))
+        try
+            result_lifted_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_lifted_kkt)
+            push!(df_lifted_kkt, (i, result_lifted_kkt.counters.k, result_lifted_kkt.counters.total_time, result_lifted_kkt.counters.init_time, result_lifted_kkt.counters.eval_function_time, 
+            result_lifted_kkt.counters.linear_solver_time, termination_code(result_lifted_kkt.status), result_lifted_kkt.objective, c))
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                push!(df_lifted_kkt,(i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+            else
+                rethrow(e)
+            end
+        end
+            
+        try
+            result_hybrid_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
+                                        cudss_algorithm=MadNLP.LDL,
+                                        kkt_system=HybridKKT.HybridCondensedKKTSystem,
+                                        equality_treatment=MadNLP.EnforceEquality,
+                                        fixed_variable_treatment=MadNLP.MakeParameter,)
+            c = evaluate(m_gpu, result_hybrid_kkt)
+            push!(df_hybrid_kkt, (i, result_hybrid_kkt.counters.k, result_hybrid_kkt.counters.total_time, result_hybrid_kkt.counters.init_time, result_hybrid_kkt.counters.eval_function_time, 
+            result_hybrid_kkt.counters.linear_solver_time, termination_code(result_hybrid_kkt.status), result_hybrid_kkt.objective, c))
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                push!(df_lifted_kkt,(i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+            else
+                rethrow(e)
+            end
+        end
 
-        result_hybrid_kkt = madnlp(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
-                                    cudss_algorithm=MadNLP.LDL,
-                                    kkt_system=HybridKKT.HybridCondensedKKTSystem,
-                                    equality_treatment=MadNLP.EnforceEquality,
-                                    fixed_variable_treatment=MadNLP.MakeParameter,)
-        c = evaluate(m_gpu, result_hybrid_kkt)
-        push!(df_hybrid_kkt, (i, result_hybrid_kkt.counters.k, result_hybrid_kkt.counters.total_time, result_hybrid_kkt.counters.init_time, result_hybrid_kkt.counters.eval_function_time, 
-        result_hybrid_kkt.counters.linear_solver_time, termination_code(result_hybrid_kkt.status), result_hybrid_kkt.objective, c))
-
-        result_madncl = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
-        c = evaluate(m_gpu, result_madncl)
-        push!(df_madncl, (i, result_madncl.counters.k, result_madncl.counters.total_time, result_madncl.counters.init_time, result_madncl.counters.eval_function_time, 
-        result_madncl.counters.linear_solver_time, termination_code(result_madncl.status), result_madncl.objective, c))
-
+        try
+            result_madncl = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
+            c = evaluate(m_gpu, result_madncl)
+            push!(df_madncl, (i, result_madncl.counters.k, result_madncl.counters.total_time, result_madncl.counters.init_time, result_madncl.counters.eval_function_time, 
+            result_madncl.counters.linear_solver_time, termination_code(result_madncl.status), result_madncl.objective, c))
+        catch e
+            if occursin("Out of GPU memory", sprint(showerror, e))
+                @warn "GPU OOM on this problem, skipping..."
+                push!(df_lifted_kkt,(i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+            else
+                rethrow(e)
+            end
+        end
 
 
         m_cpu, v_cpu, c_cpu = scopf_model(problem_case, uc_case); include_ctg = include_ctg
@@ -1459,8 +1416,14 @@ function solve_sc_cases(cases, tol, include_ctg)
                 :ma27 => df_ma27,
                 :ma86 => df_ma86,
                 :ma97 => df_ma97)
+
+    if include_ctg
+        coords = "contingency"
+    else
+        coords = "no_contingency"
+    end
  
-    #generate_tex_mpopf(mpopf_results, coords, curve_names; filename="benchmark_results_mpopf_" * case_style*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
+    generate_tex_opf(scopf_results, coords; filename="benchmark_results_scopf_" *coords*"_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*".tex")
    
     return scopf_results
 end
