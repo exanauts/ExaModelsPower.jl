@@ -1029,14 +1029,15 @@ function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
     for line in uc_data["time_series_output"]["two_winding_transformer"]
         solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to j_xf
         line["tm"] = Array(solution(result, vars.τ_jt_xf))[solution_index,:]
-        line["ta"] = Array(solution(result, vars.φ_jt_xf))[solution_index,:]
+        line["ta"] = Array(solution(result, vars.φ_jt_xf))[solution_index,:] 
     end
+    #ac line flows can be inferred from voltage and angle levels
 
     #Update DC lines
     for line in uc_data["time_series_output"]["dc_line"]
         solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to j_dc
         line["qdc_fr"] = Array(solution(result, vars.q_jt_fr_dc))[solution_index,:]
-        line["pdc_fr"] = Array(solution(result, vars.p_jt_fr_dc))[solution_index,:]
+        line["pdc_fr"] = Array(solution(result, vars.p_jt_fr_dc))[solution_index,:] #pdc_to is implied from energy conservation
         line["qdc_to"] = Array(solution(result, vars.q_jt_to_dc))[solution_index,:]
     end
 
