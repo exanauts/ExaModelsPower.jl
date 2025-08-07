@@ -9,7 +9,8 @@ ExaModelsPower.jl is an optimal power flow models using ExaModels.jl
 ## Usage
 ### Static optimal power flow
 ```julia
-using ExaModelsPower, MadNLP, MadNLPGPU, CUDA
+using ExaModelsPower, MadNLP, MadNLPGPU, CUDA, ExaModels, GOC3Benchmark, JSON
+
 
 model, vars, cons = opf_model(
     "pglib_opf_case118_ieee.m";
@@ -21,11 +22,32 @@ result = madnlp(model; tol=1e-6)
 
 ### Security-constrained optimal power flow
 ```julia
-model, vars, cons = scopf_model(
-    "pglib_opf_case118_ieee.m"; contingencies = [1,2],
+#This model is based on the GOC3 formulation of the SCOPF problem
+#https://www.pnnl.gov/publications/grid-optimization-competition-challenge-3-problem-formulation
+
+#The current implementation requires a UC solution to be provided, which is then parsed with
+#the other input data to generate a structure of named tuples which can then interface with 
+#ExaModels to generate the full model. We do not make any relaxations or decompositions for this problem
+
+model, sc_data, vars, lengths = scopf_model(
+    "data/C3E4N00073D1_scenario_303.json", "data/C3E4N00073D1_scenario_303_solution.json"; 
     backend = CUDABackend()
 )
-result = madnlp(model; tol=1e-6) # currently failing
+result = madnlp(model; tol=1e-4)
+
+#Solution from GPU can be used to warm start a CPU solution or vice versa
+model_cpu, sc_data, vars, lengths = scopf_model(
+    "data/C3E4N00073D1_scenario_303.json", "data/C3E4N00073D1_scenario_303_solution.json"; 
+    result_set = [result, vars]
+)
+result_cpu = ipopt(model_cpu; tol=1e-8)
+
+#Additionally, the SC problem can be evaluated without contingencies
+model, sc_data, vars, lengths = scopf_model(
+    "data/C3E4N00073D1_scenario_303.json", "data/C3E4N00073D1_scenario_303_solution.json"; 
+    backend = CUDABackend(), include_ctg = false
+)
+result = madnlp(model; tol=1e-4)
 ```
 
 ### Multi-period optimal power flow
@@ -59,7 +81,7 @@ result = madnlp(model; tol=1e-6)
 
 #Alternatively, provide a smooth function for the charge/discharge efficiency to remove complementarity constraint
 function example_func(d, srating)
-    return d + .2/srating*d^2
+    return -((s_rating/2)^d)+1
 end
 
 model, vars, cons = mpopf_model(

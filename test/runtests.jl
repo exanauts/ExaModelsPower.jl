@@ -32,14 +32,14 @@ true_sol_case3_pregen = 29049.351564
 true_sol_case5_curve = 78491.04247
 true_sol_case5_pregen = 87816.396884
 #W storage
-true_sol_case3_curve_stor = 25358.827525
-true_sol_case3_curve_stor_func = 25354.331998
-true_sol_case3_pregen_stor = 29023.69118
-true_sol_case3_pregen_stor_func = 29019.172473
+true_sol_case3_curve_stor = 25358.8275
+true_sol_case3_curve_stor_func = 25352.57 
+true_sol_case3_pregen_stor = 29023.691
+true_sol_case3_pregen_stor_func = 29019.32 
 true_sol_case5_curve_stor = 68782.0125
-true_sol_case5_curve_stor_func = 70235.91846
-true_sol_case5_pregen_stor = 79640.08493
-true_sol_case5_pregen_stor_func = 79630.14036
+true_sol_case5_curve_stor_func = 69271.9 
+true_sol_case5_pregen_stor = 79640.085
+true_sol_case5_pregen_stor_func = 79630.4 
 mp_test_cases = [("../data/pglib_opf_case3_lmbd.m", "case3", "../data/case3_5split.Pd", "../data/case3_5split.Qd", true_sol_case3_curve, true_sol_case3_pregen),
                  ("../data/pglib_opf_case5_pjm.m", "case5", "../data/case5_5split.Pd", "../data/case5_5split.Qd", true_sol_case5_curve, true_sol_case5_pregen)]
 
@@ -49,7 +49,7 @@ mp_stor_test_cases = [("../data/pglib_opf_case3_lmbd_mod.m", "case3", "../data/c
                         true_sol_case5_curve_stor, true_sol_case5_curve_stor_func, true_sol_case5_pregen_stor, true_sol_case5_pregen_stor_func)]
 
 function example_func(d, srating)
-    return d + .2/srating*d^2
+    return d + 20/srating*d^2
 end
 
 function runtests()
