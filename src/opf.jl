@@ -17,7 +17,7 @@ function build_polar_opf(data; backend = nothing, T=Float64, kwargs...)
     q = variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
 
     o = objective(
-        core, gen_cost(g, pg[g.i]) for g in data.gen)
+        core, gen_cost(g, pg[i]) for (i, g) in enumerate(data.gen))
 
     c_ref_angle = constraint(core, c_ref_angle_polar(va[i]) for i in data.ref_buses)
 
@@ -40,15 +40,15 @@ function build_polar_opf(data; backend = nothing, T=Float64, kwargs...)
         ucon = data.angmax,
     )
 
-    c_active_power_balance = constraint(core, c_active_power_balance_demand_polar(b, vm[b.i]) for b in data.bus)
+    c_active_power_balance = constraint(core, c_active_power_balance_demand_polar(b, vm[i]) for (i, b) in enumerate(data.bus))
 
-    c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_polar(b, vm[b.i]) for b in data.bus)
+    c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_polar(b, vm[i]) for (i, b) in enumerate(data.bus))
 
-    c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus => p[a.i] for a in data.arc)
-    c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus => q[a.i] for a in data.arc)
+    c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus => p[i] for (i, a) in enumerate(data.arc))
+    c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus => q[i] for (i, a) in enumerate(data.arc))
 
-    c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus => -pg[g.i] for g in data.gen)
-    c_active_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus => -qg[g.i] for g in data.gen)
+    c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus => -pg[i] for (i, g) in enumerate(data.gen))
+    c_reactive_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus => -qg[i] for (i, g) in enumerate(data.gen))
 
     c_from_thermal_limit = constraint(
         core, c_thermal_limit(b,p[b.f_idx],q[b.f_idx]) for b in data.branch;
@@ -101,7 +101,7 @@ function build_rect_opf(data; backend = nothing, T=Float64, kwargs...)
     q = variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
 
     o = objective(
-        core, gen_cost(g, pg[g.i]) for g in data.gen)
+        core, gen_cost(g, pg[i]) for (i, g) in enumerate(data.gen))
 
     c_ref_angle = constraint(core, c_ref_angle_rect(vr[i], vim[i]) for i in data.ref_buses)
 
@@ -125,15 +125,15 @@ function build_rect_opf(data; backend = nothing, T=Float64, kwargs...)
         ucon = data.angmax,
     )
 
-    c_active_power_balance = constraint(core, c_active_power_balance_demand_rect(b, vr[b.i], vim[b.i]) for b in data.bus)
+    c_active_power_balance = constraint(core, c_active_power_balance_demand_rect(b, vr[i], vim[i]) for (i, b) in enumerate(data.bus))
 
-    c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_rect(b, vr[b.i], vim[b.i]) for b in data.bus)
+    c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_rect(b, vr[i], vim[i]) for (i, b) in enumerate(data.bus))
 
-    c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus => p[a.i] for a in data.arc)
-    c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus => q[a.i] for a in data.arc)
+    c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus => p[i] for (i, a) in enumerate(data.arc))
+    c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus => q[i] for (i, a) in enumerate(data.arc))
 
-    c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus => -pg[g.i] for g in data.gen)
-    c_reactive_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus => -qg[g.i] for g in data.gen)
+    c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus => -pg[i] for (i, g) in enumerate(data.gen))
+    c_reactive_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus => -qg[i] for (i, g) in enumerate(data.gen))
 
     c_from_thermal_limit = constraint(
         core, c_thermal_limit(b,p[b.f_idx], q[b.f_idx]) for b in data.branch;
@@ -147,7 +147,7 @@ function build_rect_opf(data; backend = nothing, T=Float64, kwargs...)
     )
 
     c_voltage_magnitude = constraint(
-        core, c_voltage_magnitude_rect(vr[b.i], vim[b.i]) for b in data.bus; 
+        core, c_voltage_magnitude_rect(vr[i], vim[i]) for (i, b) in enumerate(data.bus);
         lcon = data.vmin.^2, 
         ucon = data.vmax.^2
     ) 
@@ -206,7 +206,7 @@ function opf_model(
     kwargs...,
 )
 
-    data, _ = parse_ac_power_data(filename)
+    data = parse_ac_power_data(filename)
     data = convert_data(data, backend)
 
     if form == :polar

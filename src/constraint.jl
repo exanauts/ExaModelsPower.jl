@@ -1,5 +1,6 @@
+# cost1
 function gen_cost(g, pg)
-    return g.cost1 * pg^2 + g.cost2 * pg + g.cost3 
+    return g.c[1] * pg^2 + g.c[2] * pg + g.c[3]
 end
 
 function c_ref_angle_polar(va)
@@ -46,7 +47,7 @@ end
 
 #no coordinates specified
 function c_thermal_limit(b, p,q)
-    return p^2 + q^2 - b.rate_a_sq
+    return p^2 + q^2 - b.rate_a^2
 end
 
 #only for mp
