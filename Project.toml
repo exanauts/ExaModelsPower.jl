@@ -1,6 +1,5 @@
 name = "ExaModelsPower"
 uuid = "2fff4b78-0b6c-428d-bac8-85ccea8c4bdf"
-authors = ["Sungho Shin <sshin@anl.gov>"]
 version = "0.1.0"
 
 [deps]
@@ -17,7 +16,7 @@ Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 ExaModels = "~0.9"
 PowerModels = "~0.21"
 JLD2 = "~0.5"
-CUDA = "~5"
+CUDA = "5 - 5.8.2"
 MadNLP = "~0.8"
 MadNLPGPU = "~0.7"
 
@@ -33,3 +32,6 @@ NLPModelsJuMP = "792afdf1-32c1-5681-94e0-d7bf7a5df49e"
 
 [targets]
 test = ["Test", "MadNLP", "MadNLPGPU", "KernelAbstractions", "CUDA", "Ipopt", "JuMP", "NLPModelsJuMP"]
+
+[sources]
+GOC3Benchmark = {url = "https://github.com/lanl-ansi/GOC3Benchmark.jl", rev = "588f356"}	
