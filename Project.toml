@@ -36,4 +36,5 @@ PowerModels = "c36e90e8-916a-50a6-bd94-075b64ef4655"
 test = ["Test", "MadNLP", "MadNLPGPU", "KernelAbstractions", "CUDA", "Ipopt", "JuMP", "NLPModelsJuMP", "PGLib", "PowerModels"]
 
 [sources]
-GOC3Benchmark = {url = "https://github.com/lanl-ansi/GOC3Benchmark.jl", rev = "588f356"}	
+GOC3Benchmark = {url = "https://github.com/lanl-ansi/GOC3Benchmark.jl", rev = "588f356"}
+ExaModels = {url = "https://github.com/hfytr/ExaModels.jl", rev = "d8f3a00"}
