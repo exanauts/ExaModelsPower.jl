@@ -3,8 +3,6 @@ module ExaModelsPower
 import JLD2
 import Downloads
 import ExaModels: ExaCore, variable, constraint, ExaModel, objective, constraint!, convert_array, solution
-import PGLib
-import PowerModels
 
 
 include("parser.jl")
@@ -32,7 +30,6 @@ function __init__()
         global TMPDIR = joinpath(@__DIR__,"..","data")
         mkpath(TMPDIR)
     end
-    PowerModels.silence()
 end
 
 end # module ExaModelsExamples

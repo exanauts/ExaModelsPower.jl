@@ -11,8 +11,6 @@ ExaPowerIO = "14903efe-9500-4d7f-a589-7ab7e15da6de"
 GOC3Benchmark = "3a45b339-860d-44d0-a64b-5f943cdd120b"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
-PGLib = "07a8691f-3d11-4330-951b-3c50f98338be"
-PowerModels = "c36e90e8-916a-50a6-bd94-075b64ef4655"
 
 [compat]
 CUDA = "~5"
@@ -33,6 +31,8 @@ MadNLP = "2621e9c9-9eb4-46b1-8089-e8c72242dfb6"
 MadNLPGPU = "d72a61cc-809d-412f-99be-fd81f4b8a598"
 NLPModelsJuMP = "792afdf1-32c1-5681-94e0-d7bf7a5df49e"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+PGLib = "07a8691f-3d11-4330-951b-3c50f98338be"
+PowerModels = "c36e90e8-916a-50a6-bd94-075b64ef4655"
 
 [targets]
-test = ["Test", "MadNLP", "MadNLPGPU", "KernelAbstractions", "CUDA", "Ipopt", "JuMP", "NLPModelsJuMP"]
+test = ["Test", "MadNLP", "MadNLPGPU", "KernelAbstractions", "CUDA", "Ipopt", "JuMP", "NLPModelsJuMP", "PGLib", "PowerModels"]
