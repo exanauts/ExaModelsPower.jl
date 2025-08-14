@@ -1,6 +1,5 @@
 name = "ExaModelsPower"
 uuid = "2fff4b78-0b6c-428d-bac8-85ccea8c4bdf"
-authors = ["Sungho Shin <sshin@anl.gov>"]
 version = "0.1.0"
 
 [deps]
@@ -35,3 +34,6 @@ PowerModels = "c36e90e8-916a-50a6-bd94-075b64ef4655"
 
 [targets]
 test = ["Test", "MadNLP", "MadNLPGPU", "KernelAbstractions", "CUDA", "Ipopt", "JuMP", "NLPModelsJuMP", "PGLib", "PowerModels"]
+
+[sources]
+GOC3Benchmark = {url = "https://github.com/lanl-ansi/GOC3Benchmark.jl", rev = "588f356"}	
