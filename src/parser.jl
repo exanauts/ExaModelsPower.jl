@@ -1,7 +1,7 @@
 using ExaPowerIO
  
 convert_data(data::N, backend) where {names,N<:NamedTuple{names}} =
-    NamedTuple{names}(convert_array(d, backend) for d in data)
+    NamedTuple{names}(typeof(d) <: AbstractVector ? convert_array(d, backend) : d for d in data)
 
 function parse_ac_power_data(filename)
     _, f = splitdir(filename)
