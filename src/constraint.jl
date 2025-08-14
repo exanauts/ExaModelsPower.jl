@@ -106,15 +106,15 @@ end
 
 #Formulation from Geth, Coffrin, Fobes (2020)
 function c_active_stor_power(s, pst, pstd, pstc, I2)
-    return pst + pstd - pstc - s.Pexts - s.Zr*I2
+    return pst + pstd - pstc - s.ps - s.r*I2
 end
 
 function c_active_storage_power_smooth(s, pst, pstd, I2)
-    return pst + pstd - s.Pexts - s.Zr*I2
+    return pst + pstd - s.ps - s.r*I2
 end
 
 function c_reactive_stor_power(s, qst, qint, I2)
-    return qst - qint - s.Qexts - s.Zim*I2
+    return qst - qint - s.qs - s.x*I2
 end
 
 function c_ohms_polar(pst, qst, vm, I2)
@@ -126,15 +126,15 @@ function c_ohms_rect(pst, qst, vr, vim, I2)
 end
 
 function c_stor_state(s, E0, E1, pstc, pstd)
-    return E0 - E1 - (s.etac*pstc - pstd/s.etad)
+    return E0 - E1 - (s.charge_efficiency*pstc - pstd/s.discharge_efficiency)
 end
 
 function c_storage_state_smooth(s, E0, E1, discharge_func::Function, pstd)
-    return E0 - E1 + discharge_func(pstd, s.Srating)
+    return E0 - E1 + discharge_func(pstd, s.thermal_rating)
 end
 
 function c_transfer_lim(s, pst, qst)
-    return pst^2 + qst^2 - s.Srating^2
+    return pst^2 + qst^2 - s.thermal_rating^2
 end
 
 #used for charge and discharge limits

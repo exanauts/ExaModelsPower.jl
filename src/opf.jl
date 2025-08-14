@@ -16,8 +16,7 @@ function build_polar_opf(data; backend = nothing, T=Float64, kwargs...)
     p = variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
     q = variable(core, length(data.arc); lvar = -data.rate_a, uvar = data.rate_a)
 
-    o = objective(
-        core, gen_cost(g, pg[i]) for (i, g) in enumerate(data.gen))
+    o = objective( core, gen_cost(g, pg[i]) for (i, g) in enumerate(data.gen))
 
     c_ref_angle = constraint(core, c_ref_angle_polar(va[i]) for i in data.ref_buses)
 
@@ -56,13 +55,12 @@ function build_polar_opf(data; backend = nothing, T=Float64, kwargs...)
         )
 
     c_to_thermal_limit = constraint(
-        core, c_thermal_limit(b,p[b.t_idx],q[b.t_idx])
-        for b in data.branch;
+        core, c_thermal_limit(b,p[b.t_idx],q[b.t_idx]) for b in data.branch;
         lcon = fill!(similar(data.branch, Float64, length(data.branch)), -Inf),
     )
 
     model =ExaModel(core; kwargs...)
-    
+
     vars = (
             va = va,
             vm = vm,
@@ -217,3 +215,4 @@ function opf_model(
         error("Invalid coordinate symbol - valid options are :polar or :rect")
     end
 end
+
