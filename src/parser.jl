@@ -45,7 +45,7 @@ function parse_ac_power_data(filename)
     )
 
     @info "Saving JLD2 cache file"
-    # JLD2.save(joinpath(TMPDIR, name * ".jld2"), "data", data)
+    JLD2.save(joinpath(TMPDIR, name * ".jld2"), "data", data)
 
     return data
 end
