@@ -16,7 +16,7 @@ GOC3Benchmark = {rev = "588f356", url = "https://github.com/lanl-ansi/GOC3Benchm
 ExaPowerIO = {rev = "9ade0f7", url = "https://github.com/MadNLP/ExaPowerIO.jl"}
 
 [compat]
-CUDA = "~5"
+CUDA = "5 - 5.8.2"
 ExaModels = "0.9.1"
 ExaPowerIO = "0.2.0"
 JLD2 = "~0.5"
