@@ -52,6 +52,8 @@ function example_func(d, srating)
     return d + 20/srating*d^2
 end
 
+PowerModels.silence()
+
 function parse_pm(filename)
     data = PowerModels.parse_file(filename)
     PowerModels.standardize_cost_terms!(data, order = 2)

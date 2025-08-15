@@ -12,11 +12,11 @@ function parse_mp_power_data(filename, N, corrective_action_ratio)
         ;
         data...,
         refarray = [(i,t) for i in data.ref_buses, t in 1:N],
-        barray = [(;b, i = i, t = t) for (i, b) in enumerate(data.branch), t in 1:N ],
-        busarray = [(;b, i = i, t = t) for (i, b) in enumerate(data.bus), t in 1:N ],
-        arcarray = [(;a, i = i, t = t) for (i, a) in enumerate(data.arc), t in 1:N ],
-        genarray = [(;g, i = i, t = t) for (i, g) in enumerate(data.gen), t in 1:N ],
-        storarray = isempty(data.storage) ? empty_data =  empty_stor : [(;s, i = i, t = t) for (i, s) in enumerate(data.storage), t in 1:N],
+        barray = [(;b, t = t) for b in data.branch, t in 1:N ],
+        busarray = [(;b, t = t) for b in data.bus, t in 1:N ],
+        arcarray = [(;a, t = t) for a in data.arc, t in 1:N ],
+        genarray = [(;g, t = t) for g in data.gen, t in 1:N ],
+        storarray = isempty(data.storage) ? empty_data =  empty_stor : [(;s, t = t) for s in data.storage, t in 1:N],
         Δp = corrective_action_ratio .* (data.pmax .- data.pmin)
     )
 
@@ -30,6 +30,7 @@ function update_load_data(busarray, curve)
             b = busarray[x, t]
             busarray[x, t] = (
                 b=ExaPowerIO.BusData(
+                    b.b.i,
                     b.b.bus_i,
                     b.b.type,
                     b.b.pd*curve[t],
@@ -43,7 +44,7 @@ function update_load_data(busarray, curve)
                     b.b.zone,
                     b.b.vmax,
                     b.b.vmin,
-                  ), i=b.i, t=t
+                  ), t=t
                 )
         end
     end
@@ -55,6 +56,7 @@ function update_load_data(busarray, pd, qd, baseMVA)
         b = busarray[idx[1], idx[2]]
         busarray[idx[1], idx[2]] = (
             b=ExaPowerIO.BusData(
+                b.b.i,
                 b.b.bus_i,
                 b.b.type,
                 pd_t / baseMVA,
@@ -69,7 +71,6 @@ function update_load_data(busarray, pd, qd, baseMVA)
                 b.b.vmax,
                 b.b.vmin,
             ),
-            i=b.i,
             t=idx[2],
         )
     end
@@ -86,24 +87,24 @@ function build_base_mpopf(core, data, N)
     p = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
     q = variable(core, size(data.arc, 1), N; lvar = repeat(-data.rate_a, 1, N), uvar = repeat(data.rate_a, 1, N))
 
-    o = objective(core, gen_cost(g, pg[i, t]) for (g, i, t) in data.genarray)
+    o = objective(core, gen_cost(g, pg[g.i, t]) for (g, t) in data.genarray)
 
 
     c_from_thermal_limit = constraint(
         core,
-        c_thermal_limit(b, p[b.f_idx, t], q[b.f_idx, t]) for (b, i, t) in data.barray;
+        c_thermal_limit(b, p[b.f_idx, t], q[b.f_idx, t]) for (b, t) in data.barray;
         lcon = fill(-Inf, size(data.barray))
     )
 
     c_to_thermal_limit = constraint(
         core,
-        c_thermal_limit(b, p[b.t_idx, t], q[b.t_idx, t]) for (b, i, t) in data.barray;
+        c_thermal_limit(b, p[b.t_idx, t], q[b.t_idx, t]) for (b, t) in data.barray;
         lcon = fill(-Inf, size(data.barray))
     )
 
     c_ramp_rate = constraint(
         core,
-        c_ramp(pg[i, t-1], pg[i, t]) for (g, i, t) in data.genarray[:, 2:N];
+        c_ramp(pg[g.i, t-1], pg[g.i, t]) for (g, t) in data.genarray[:, 2:N];
         lcon = repeat(-data.Δp,  1, N-1),
         ucon = repeat( data.Δp, 1, N-1)
     )
@@ -137,25 +138,25 @@ function add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
             uvar = repeat(data.vmax, 1, N),
         )
 
-        c_ref_angle = constraint(core, c_ref_angle_polar(va[i,t]) for (i,t) in data.refarray)
+        c_ref_angle = constraint(core, c_ref_angle_polar(va[i, t]) for (i, t) in data.refarray)
 
-        c_to_active_power_flow = constraint(core, c_to_active_power_flow_polar(b, p[b.f_idx, t], vm[b.f_bus, t], vm[b.t_bus, t], va[b.f_bus, t], va[b.t_bus, t]) for (b, i, t) in data.barray)
+        c_to_active_power_flow = constraint(core, c_to_active_power_flow_polar(b, p[b.f_idx, t], vm[b.f_bus, t], vm[b.t_bus, t], va[b.f_bus, t], va[b.t_bus, t]) for (b, t) in data.barray)
 
-        c_to_reactive_power_flow = constraint(core, c_to_reactive_power_flow_polar(b, q[b.f_idx, t], vm[b.f_bus, t], vm[b.t_bus, t], va[b.f_bus, t], va[b.t_bus, t]) for (b, i, t) in data.barray)
+        c_to_reactive_power_flow = constraint(core, c_to_reactive_power_flow_polar(b, q[b.f_idx, t], vm[b.f_bus, t], vm[b.t_bus, t], va[b.f_bus, t], va[b.t_bus, t]) for (b, t) in data.barray)
 
-        c_from_active_power_flow = constraint(core, c_from_active_power_flow_polar(b, p[b.t_idx, t], vm[b.f_bus, t], vm[b.t_bus, t], va[b.f_bus, t], va[b.t_bus, t]) for (b, i, t) in data.barray)
+        c_from_active_power_flow = constraint(core, c_from_active_power_flow_polar(b, p[b.t_idx, t], vm[b.f_bus, t], vm[b.t_bus, t], va[b.f_bus, t], va[b.t_bus, t]) for (b, t) in data.barray)
 
-        c_from_reactive_power_flow = constraint(core, c_from_reactive_power_flow_polar(b, q[b.t_idx, t], vm[b.f_bus, t], vm[b.t_bus, t], va[b.f_bus, t], va[b.t_bus, t]) for (b, i, t) in data.barray)
+        c_from_reactive_power_flow = constraint(core, c_from_reactive_power_flow_polar(b, q[b.t_idx, t], vm[b.f_bus, t], vm[b.t_bus, t], va[b.f_bus, t], va[b.t_bus, t]) for (b, t) in data.barray)
 
         c_phase_angle_diff = constraint(
              core,
-             c_phase_angle_diff_polar(b, va[b.f_bus, t], va[b.t_bus, t]) for (b, i, t) in data.barray;
+             c_phase_angle_diff_polar(b, va[b.f_bus, t], va[b.t_bus, t]) for (b, t) in data.barray;
              lcon = repeat(data.angmin, 1, N),
              ucon = repeat(data.angmax, 1, N),
         )
 
-        c_active_power_balance = constraint(core, c_active_power_balance_demand_polar(b, vm[i, t]) for (b, i, t) in data.busarray)
-        c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_polar(b, vm[i, t]) for (b, i, t) in data.busarray)
+        c_active_power_balance = constraint(core, c_active_power_balance_demand_polar(b, vm[b.i, t]) for (b, t) in data.busarray)
+        c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_polar(b, vm[b.i, t]) for (b, t) in data.busarray)
 
         cons = (;cons...,
                 c_ref_angle = c_ref_angle,
@@ -176,27 +177,27 @@ function add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
 
         c_ref_angle = constraint(core, c_ref_angle_rect(vr[i, t], vim[i, t]) for (i, t) in data.refarray)
     
-        c_to_active_power_flow = constraint(core, c_to_active_power_flow_rect(b, p[b.f_idx, t], vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, i, t) in data.barray)
+        c_to_active_power_flow = constraint(core, c_to_active_power_flow_rect(b, p[b.f_idx, t], vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, t) in data.barray)
     
-        c_to_reactive_power_flow = constraint(core, c_to_reactive_power_flow_rect(b, q[b.f_idx, t], vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, i, t) in data.barray)
+        c_to_reactive_power_flow = constraint(core, c_to_reactive_power_flow_rect(b, q[b.f_idx, t], vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, t) in data.barray)
 
-        c_from_active_power_flow = constraint(core, c_from_active_power_flow_rect(b, p[b.t_idx, t], vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, i, t) in data.barray)
+        c_from_active_power_flow = constraint(core, c_from_active_power_flow_rect(b, p[b.t_idx, t], vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, t) in data.barray)
 
-        c_from_reactive_power_flow = constraint(core, c_from_reactive_power_flow_rect(b, q[b.t_idx, t], vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, i, t) in data.barray)
+        c_from_reactive_power_flow = constraint(core, c_from_reactive_power_flow_rect(b, q[b.t_idx, t], vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, t) in data.barray)
     
         c_phase_angle_diff = constraint(
             core,
-            c_phase_angle_diff_rect(b, vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, i, t) in data.barray;
+            c_phase_angle_diff_rect(b, vr[b.f_bus, t], vr[b.t_bus, t], vim[b.f_bus, t], vim[b.t_bus, t]) for (b, t) in data.barray;
             lcon = repeat(data.angmin, 1, N),
             ucon = repeat(data.angmax, 1, N),
         )
     
-        c_active_power_balance = constraint(core, c_active_power_balance_demand_rect(b, vr[i, t], vim[i, t]) for (b, i, t) in data.busarray)
-        c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_rect(b, vr[i, t], vim[i, t]) for (b, i, t) in data.busarray)
+        c_active_power_balance = constraint(core, c_active_power_balance_demand_rect(b, vr[b.i, t], vim[b.i, t]) for (b, t) in data.busarray)
+        c_reactive_power_balance = constraint(core, c_reactive_power_balance_demand_rect(b, vr[b.i, t], vim[b.i, t]) for (b, t) in data.busarray)
 
         c_voltage_magnitude = constraint(
-                core, c_voltage_magnitude_rect(vr[i, t], vim[i, t])
-                for (b, i, t) in data.busarray;
+                core, c_voltage_magnitude_rect(vr[b.i, t], vim[b.i, t])
+                for (b, t) in data.busarray;
                 lcon = repeat(data.vmin, 1, N).^2,
                 ucon = repeat(data.vmax, 1, N).^2
             )
@@ -215,11 +216,11 @@ function add_mpopf_cons(core, data, N, Nbus, vars, cons, form)
 
     end
 
-    c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus + Nbus*(t-1) => p[i, t] for (a, i, t) in data.arcarray)
-    c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus + Nbus*(t-1) => q[i, t] for (a, i, t) in data.arcarray)
+    c_active_power_balance_arcs = constraint!(core, c_active_power_balance, a.bus + Nbus*(t-1) => p[a.i, t] for (a, t) in data.arcarray)
+    c_reactive_power_balance_arcs = constraint!(core, c_reactive_power_balance, a.bus + Nbus*(t-1) => q[a.i, t] for (a, t) in data.arcarray)
 
-    c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus + Nbus*(t-1) => -pg[i, t] for (g, i, t) in data.genarray)
-    c_reactive_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus + Nbus*(t-1) => -qg[i, t] for (g, i, t) in data.genarray)
+    c_active_power_balance_gen = constraint!(core, c_active_power_balance, g.bus + Nbus*(t-1) => -pg[g.i, t] for (g, t) in data.genarray)
+    c_reactive_power_balance_gen = constraint!(core, c_reactive_power_balance, g.bus + Nbus*(t-1) => -qg[g.i, t] for (g, t) in data.genarray)
 
     return vars, cons
 end
@@ -279,20 +280,20 @@ function build_mpopf_stor_main(core, data, N, Nbus, vars, cons, form)
     c_active_power_balance = cons.c_active_power_balance
     c_reactive_power_balance = cons.c_reactive_power_balance
 
-    c_active_power_balance_stor = constraint!(core, c_active_power_balance, s.storage_bus + Nbus*(t-1) => pst[i, t] for (s, i, t) in data.storarray)
-    c_reactive_power_balance_stor = constraint!(core, c_reactive_power_balance, s.storage_bus + Nbus*(t-1) => qst[i, t] for (s, i, t) in data.storarray)
+    c_active_power_balance_stor = constraint!(core, c_active_power_balance, s.storage_bus + Nbus*(t-1) => pst[s.i, t] for (s, t) in data.storarray)
+    c_reactive_power_balance_stor = constraint!(core, c_reactive_power_balance, s.storage_bus + Nbus*(t-1) => qst[s.i, t] for (s, t) in data.storarray)
 
-    c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[i, t], qint[i, t], I2[i, t]) for (s, i, t) in data.storarray)
+    c_reactive_storage_power = constraint(core, c_reactive_stor_power(s, qst[s.i, t], qint[s.i, t], I2[s.i, t]) for (s, t) in data.storarray)
 
-    c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[i, t], qst[i, t]) for (s, i, t) in data.storarray; lcon = fill(-Inf, size(data.storarray)))
+    c_storage_transfer_thermal_limit  = constraint(core, c_transfer_lim(s, pst[s.i, t], qst[s.i, t]) for (s, t) in data.storarray; lcon = fill(-Inf, size(data.storarray)))
 
     if form == :polar
         vm = vars.vm
-        c_ohms = constraint(core, c_ohms_polar(pst[i, t], qst[i, t], vm[s.storage_bus, t], I2[i, t]) for (s, i, t) in data.storarray)
+        c_ohms = constraint(core, c_ohms_polar(pst[s.i, t], qst[s.i, t], vm[s.storage_bus, t], I2[s.i, t]) for (s, t) in data.storarray)
     elseif form == :rect
         vr = vars.vr
         vim = vars.vim
-        c_ohms = constraint(core, c_ohms_rect(pst[i, t], qst[i, t], vr[s.storage_bus, t], vim[s.storage_bus, t], I2[i, t]) for (s, i, t) in data.storarray)
+        c_ohms = constraint(core, c_ohms_rect(pst[s.i, t], qst[s.i, t], vr[s.storage_bus, t], vim[s.storage_bus, t], I2[s.i, t]) for (s, t) in data.storarray)
     end
 
     cons = (;cons..., c_reactive_storage_power = c_reactive_storage_power, c_storage_transfer_thermal_limit = c_storage_transfer_thermal_limit, c_ohms=c_ohms)
@@ -309,19 +310,19 @@ function add_piecewise_cons(core, data, N, vars, cons, storage_complementarity_c
     I2 = vars.I2
     E = vars.E
 
-    c_active_storage_power = constraint(core, c_active_stor_power(s, pst[i, t], pstd[i, t], pstc[i, t], I2[i, t]) for (s, i, t) in data.storarray)
+    c_active_storage_power = constraint(core, c_active_stor_power(s, pst[s.i, t], pstd[s.i, t], pstc[s.i, t], I2[s.i, t]) for (s, t) in data.storarray)
 
-    c_storage_state = constraint(core, c_stor_state(s, E[i, t], E[i, t - 1], pstc[i, t], pstd[i, t]) for (s, i, t) in data.storarray[:, 2:N])
+    c_storage_state = constraint(core, c_stor_state(s, E[s.i, t], E[s.i, t - 1], pstc[s.i, t], pstd[s.i, t]) for (s, t) in data.storarray[:, 2:N])
 
-    c_storage_state_init = constraint(core, c_stor_state(s, E[i, t], s.energy, pstc[i, t], pstd[i, t]) for (s, i, t) in data.storarray[:, 1])
+    c_storage_state_init = constraint(core, c_stor_state(s, E[s.i, t], s.energy, pstc[s.i, t], pstd[s.i, t]) for (s, t) in data.storarray[:, 1])
 
-    c_discharge_thermal_limit = constraint(core, c_discharge_lim(pstd[i, t], pstc[i, t]) for (s, i, t) in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+    c_discharge_thermal_limit = constraint(core, c_discharge_lim(pstd[s.i, t], pstc[s.i, t]) for (s, t) in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
 
-    c_discharge_positivity = constraint(core, pstd[i, t] for (s, i, t) in data.storarray; ucon = fill(Inf, size(data.storarray)))
+    c_discharge_positivity = constraint(core, pstd[s.i, t] for (s, t) in data.storarray; ucon = fill(Inf, size(data.storarray)))
 
     #Complimentarity constraint
     if storage_complementarity_constraint
-        c_complementarity = constraint(core, c_comp(pstc[i, t], pstd[i, t]) for (s, i, t) in data.storarray)
+        c_complementarity = constraint(core, c_comp(pstc[s.i, t], pstd[s.i, t]) for (s, t) in data.storarray)
         cons = (;cons..., c_complementarity = c_complementarity)
     end
 
@@ -341,13 +342,13 @@ function add_smooth_cons(core, data, N, vars, cons, discharge_func)
     I2 = vars.I2
     E = vars.E
 
-    c_active_storage_power = constraint(core, c_active_storage_power_smooth(s, pst[i, t], pstd[i, t], I2[i, t]) for (s, i, t) in data.storarray)
+    c_active_storage_power = constraint(core, c_active_storage_power_smooth(s, pst[s.i, t], pstd[s.i, t], I2[s.i, t]) for (s, t) in data.storarray)
 
-    c_storage_state = constraint(core, c_storage_state_smooth(s, E[i, t], E[i, t - 1], discharge_func, pstd[i, t]) for (s, i, t) in data.storarray[:, 2:N])
+    c_storage_state = constraint(core, c_storage_state_smooth(s, E[s.i, t], E[s.i, t - 1], discharge_func, pstd[s.i, t]) for (s, t) in data.storarray[:, 2:N])
 
-    c_storage_state_init = constraint(core, c_storage_state_smooth(s, E[i, t], s.energy, discharge_func, pstd[i, t]) for (s, i, t) in data.storarray[:, 1])
+    c_storage_state_init = constraint(core, c_storage_state_smooth(s, E[s.i, t], s.energy, discharge_func, pstd[s.i, t]) for (s, t) in data.storarray[:, 1])
 
-    c_discharge_thermal_limit = constraint(core, c_discharge_limit_smooth(pstd[i, t]) for (s, i, t) in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
+    c_discharge_thermal_limit = constraint(core, c_discharge_limit_smooth(pstd[s.i, t]) for (s, t) in data.storarray; lcon = -repeat(data.srating, 1, N), ucon = repeat(data.srating, 1, N))
 
     cons = (;cons...,
                 c_active_storage_power = c_active_storage_power,
