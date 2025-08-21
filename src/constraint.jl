@@ -106,15 +106,15 @@ end
 
 #Formulation from Geth, Coffrin, Fobes (2020)
 function c_active_stor_power(s, pst, pstd, pstc, I2)
-    return pst + pstd - pstc - s.ps - s.r*I2
+    return pst + pstd - pstc - s.Pexts - s.Zr*I2
 end
 
 function c_active_storage_power_smooth(s, pst, pstd, I2)
-    return pst + pstd - s.ps - s.r*I2
+    return pst + pstd - s.Pexts - s.Zr*I2
 end
 
 function c_reactive_stor_power(s, qst, qint, I2)
-    return qst - qint - s.qs - s.x*I2
+    return qst - qint - s.Qexts - s.Zim*I2
 end
 
 function c_ohms_polar(pst, qst, vm, I2)
