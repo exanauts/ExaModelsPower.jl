@@ -4,14 +4,16 @@ function is_pr(uid_str::String, L_J_pr::Int, L_J_cs::Int, producers_first::Bool)
     is_pr(uid, L_J_pr, L_J_cs, producers_first)
 end
 
+function get_j_prcs(uid_str::String, L_J_pr::Int, L_J_cs::Int, producers_first::Bool)
+    parse(Int, match(r"\d+", uid_str).match) + 1
+end
+
 function get_j_pr(uid_str::String, L_J_pr::Int, L_J_cs::Int, producers_first::Bool)
-    uid = parse(Int, match(r"\d+", uid_str).match)
-    (j_prcs=uid+1, j_pr=uid + 1 + (producers_first ? 0 : (-L_J_cs)))
+    parse(Int, match(r"\d+", uid_str).match) + 1 + (producers_first ? 0 : (-L_J_cs))
 end
 
 function get_j_cs(uid_str::String, L_J_pr::Int, L_J_cs::Int, producers_first::Bool)
-    uid = parse(Int, match(r"\d+", uid_str).match)
-    (j_prcs=uid+1, j_cs=uid + 1 + (producers_first ? (-L_J_pr) : 0))
+    parse(Int, match(r"\d+", uid_str).match) + 1 + (producers_first ? (-L_J_pr) : 0)
 end
 
 function parse_sc_data_static(data, producers_first)
@@ -40,10 +42,12 @@ function parse_sc_data_static(data, producers_first)
                 begin
                     ts_val = data.sdd_ts_lookup[key]
                     j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j_prcs = get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first)
+                    j_pr = get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)
                     bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
                     uid = val["uid"]
                     cost = ts_val["cost"]
-                    (j = j, bus=bus, uid = uid, cost=cost, get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)...)
+                    (j = j, bus=bus, uid = uid, cost=cost, j_pr=j_pr, j_prcs=j_prcs)
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "producer"
                 
             ], by = x -> x.j)
@@ -54,10 +58,12 @@ function parse_sc_data_static(data, producers_first)
                 begin
                     ts_val = data.sdd_ts_lookup[key]
                     j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j_prcs = get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first)
+                    j_cs = get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)
                     bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
                     uid = val["uid"]
                     cost = ts_val["cost"]
-                    (j = j, bus=bus, uid = uid, cost=cost, get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)...)
+                    (j = j, bus=bus, uid = uid, cost=cost, j_cs=j_cs, j_prcs=j_prcs)
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "consumer"
             ], by = x -> x.j)
 
@@ -220,6 +226,8 @@ function parse_sc_data_static(data, producers_first)
                 begin
                     ts_val = data.sdd_ts_lookup[key]
                     j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j_pr = get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)
+                    j_prcs = get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first)
                     bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
                     uid = val["uid"]
                     c_on = val["on_cost"]
@@ -255,7 +263,7 @@ function parse_sc_data_static(data, producers_first)
                     q_min = convert(Vector{Float64}, ts_val["q_lb"])
                     sus = val["startup_states"]
                     
-                    (j = j, get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)..., bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
+                    (j = j, j_pr=j_pr, j_prcs=j_prcs, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
                     c_rgu = c_rgu, c_rgd = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
                     p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0, p_max=p_max, p_min=p_min, q_max=q_max, q_min=q_min, sus=sus)
@@ -269,6 +277,8 @@ function parse_sc_data_static(data, producers_first)
                 begin
                     ts_val = data.sdd_ts_lookup[key]
                     j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j_prcs = get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first)
+                    j_cs = get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)
                     bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
                     uid = val["uid"]
                     c_on = val["on_cost"]
@@ -304,7 +314,7 @@ function parse_sc_data_static(data, producers_first)
                     q_min = convert(Vector{Float64}, ts_val["q_lb"])
                     sus = val["startup_states"]
 
-                    (j = j, get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)..., bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
+                    (j = j, j_cs=j_cs, j_prcs=j_prcs, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
                     c_rgu = c_rgu, c_rgd = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
                     c_qru = c_qru, c_qrd = c_qrd, p_rgu_max = p_rgu_max, p_rgd_max = p_rgd_max, p_scr_max = p_scr_max, p_nsc_max = p_nsc_max, p_rru_on_max = p_rru_on_max,
                     p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0, p_max=p_max, p_min=p_min, q_max=q_max, q_min=q_min, sus=sus)
@@ -348,7 +358,13 @@ function parse_sc_data_static(data, producers_first)
         ], by = x -> x.n),
 
         active_reserve_set_pr = [
-            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + 1, n_p =  parse(Int, match(r"\d+", uid).match) + 1, get_j_pr(device["uid"], L_J_pr, L_J_cs, producers_first)...)
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1,
+             j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1,
+             n = parse(Int, match(r"\d+", uid).match) + 1,
+             n_p =  parse(Int, match(r"\d+", uid).match) + 1,
+             j_pr=get_j_pr(device["uid"], L_J_pr, L_J_cs, producers_first),
+             j_prcs=get_j_prcs(device["uid"], L_J_pr, L_J_cs, producers_first),
+            )
             for uid in data.azr_ids
             for bus in values(data.bus_lookup)
             if uid in bus["active_reserve_uids"]
@@ -357,7 +373,12 @@ function parse_sc_data_static(data, producers_first)
         ],
 
         active_reserve_set_cs = [
-            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + 1, n_p =  parse(Int, match(r"\d+", uid).match) + 1, get_j_cs(device["uid"], L_J_pr, L_J_cs, producers_first)...)
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1,
+             j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1,
+             n = parse(Int, match(r"\d+", uid).match) + 1,
+             n_p =  parse(Int, match(r"\d+", uid).match) + 1,
+             j_cs=get_j_cs(device["uid"], L_J_pr, L_J_cs, producers_first),
+             j_prcs=get_j_prcs(device["uid"], L_J_pr, L_J_cs, producers_first),)
             for uid in data.azr_ids
             for bus in values(data.bus_lookup)
             if uid in bus["active_reserve_uids"]
@@ -366,7 +387,12 @@ function parse_sc_data_static(data, producers_first)
         ],
 
         reactive_reserve_set_pr = [
-            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + L_N_p + 1, n_q = parse(Int, match(r"\d+", uid).match) + 1, get_j_pr(device["uid"], L_J_pr, L_J_cs, producers_first)...)
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1,
+             j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1,
+             n = parse(Int, match(r"\d+", uid).match) + L_N_p + 1,
+             n_q = parse(Int, match(r"\d+", uid).match) + 1,
+             j_pr=get_j_pr(device["uid"], L_J_pr, L_J_cs, producers_first),
+             j_prcs=get_j_prcs(device["uid"], L_J_pr, L_J_cs, producers_first),)
             for uid in data.rzr_ids
             for bus in values(data.bus_lookup)
             if uid in bus["reactive_reserve_uids"]
@@ -375,7 +401,12 @@ function parse_sc_data_static(data, producers_first)
         ],
 
         reactive_reserve_set_cs = [
-            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1, j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1, n = parse(Int, match(r"\d+", uid).match) + L_N_p + 1, n_q = parse(Int, match(r"\d+", uid).match) + 1, get_j_cs(device["uid"], L_J_pr, L_J_cs, producers_first)...)
+            (i = parse(Int, match(r"\d+", bus["uid"]).match) + 1,
+             j = parse(Int, match(r"\d+", device["uid"]).match) + L_J_br + 1,
+             n = parse(Int, match(r"\d+", uid).match) + L_N_p + 1,
+             n_q = parse(Int, match(r"\d+", uid).match) + 1,
+             j_cs=get_j_cs(device["uid"], L_J_pr, L_J_cs, producers_first),
+             j_prcs=get_j_prcs(device["uid"], L_J_pr, L_J_cs, producers_first),)
             for uid in data.rzr_ids
             for bus in values(data.bus_lookup)
             if uid in bus["reactive_reserve_uids"]
@@ -444,7 +475,8 @@ function parse_sc_data(data, uc_data, data_json)
 
     T_supc_pr = [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-            get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+            j_pr=get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first),
+            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
             t = t,
             t_prime = t_prime, 
             p_supc = data.sdd_ts_lookup[key]["p_lb"][t_prime] - val["p_startup_ramp_ub"]*(get_as(dt, t_prime)[3] - get_as(dt, t)[3]),
@@ -471,7 +503,8 @@ function parse_sc_data(data, uc_data, data_json)
 
     T_supc_cs = [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-            get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+            j_cs=get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first),
+            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
             t = t,
             t_prime = t_prime, 
             p_supc = data.sdd_ts_lookup[key]["p_lb"][t_prime] - val["p_startup_ramp_ub"]*(get_as(dt, t_prime)[3] - get_as(dt, t)[3]),
@@ -503,9 +536,9 @@ function parse_sc_data(data, uc_data, data_json)
         for t_prime in periods
             for (key, val) in data.sdd_lookup
                 if t_prime == 1 && t >= t_prime
-                    p_sdpc[get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first).j_prcs, t, t_prime] = val["initial_status"]["p"] - val["p_shutdown_ramp_ub"]*(get_as(dt, t)[3] - get_as(dt, t_prime)[1])
+                    p_sdpc[get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first), t, t_prime] = val["initial_status"]["p"] - val["p_shutdown_ramp_ub"]*(get_as(dt, t)[3] - get_as(dt, t_prime)[1])
                 elseif t >= t_prime
-                    p_sdpc[get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first).j_prcs, t, t_prime] = data.sdd_ts_lookup[key]["p_lb"][t_prime-1]- val["p_shutdown_ramp_ub"]*(get_as(dt, t)[3] - get_as(dt, t_prime)[1])
+                    p_sdpc[get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first), t, t_prime] = data.sdd_ts_lookup[key]["p_lb"][t_prime-1]- val["p_shutdown_ramp_ub"]*(get_as(dt, t)[3] - get_as(dt, t_prime)[1])
                 end
             end
         end
@@ -513,7 +546,8 @@ function parse_sc_data(data, uc_data, data_json)
 
     T_sdpc_pr = [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-            get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+            j_pr=get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first),
+            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
             t = t,
             t_prime = t_prime,
             p_sdpc = p_sdpc[parse(Int, match(r"\d+", val["uid"]).match)+1, t, t_prime],
@@ -539,7 +573,8 @@ function parse_sc_data(data, uc_data, data_json)
 
     T_sdpc_cs = [
             (j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-            get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+            j_cs=get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first),
+            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
             t = t,
             t_prime = t_prime,
             p_sdpc = p_sdpc[parse(Int, match(r"\d+", val["uid"]).match)+1, t, t_prime],
@@ -571,7 +606,8 @@ function parse_sc_data(data, uc_data, data_json)
                 push!(W_en_max_pr, (
                     w_en_max_pr_ind=w_en_max_pr_ind,
                     j=parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-                    get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                    j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                    j_pr=get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first),
                     a_en_max_start = w[1],
                     a_en_max_end = w[2],
                     e_max = w[3])
@@ -591,7 +627,8 @@ function parse_sc_data(data, uc_data, data_json)
                 push!(W_en_max_cs, (
                     w_en_max_cs_ind=w_en_max_cs_ind,
                     j=parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-                    get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                    j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                    j_cs=get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first),
                     a_en_max_start = w[1],
                     a_en_max_end = w[2],
                     e_max = w[3])
@@ -610,7 +647,8 @@ function parse_sc_data(data, uc_data, data_json)
             for w in val["energy_req_lb"]
                 push!(W_en_min_pr, (w_en_min_pr_ind = w_en_min_pr_ind,
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
-                get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                j_pr=get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first),
                 a_en_min_start = w[1],
                 a_en_min_end = w[2],
                 e_min = w[3]))
@@ -628,7 +666,8 @@ function parse_sc_data(data, uc_data, data_json)
             for w in val["energy_req_lb"]
                 push!(W_en_min_cs, (w_en_min_cs_ind = w_en_min_cs_ind,
                 j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
-                get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                j_cs=get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first),
                 a_en_min_start = w[1],
                 a_en_min_end = w[2],
                 e_min = w[3]))
@@ -649,7 +688,8 @@ function parse_sc_data(data, uc_data, data_json)
                     if w[1] + ε_time < get_as(dt, t)[2] && get_as(dt, t)[2] <= w[2] + ε_time
                         push!(T_w_en_max_pr, (w_en_max_pr_ind = w_en_max_pr_ind,
                             j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
-                            get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                            j_pr=get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first),
                             t = t,
                             dt=dt[t]))
                     end
@@ -668,7 +708,8 @@ function parse_sc_data(data, uc_data, data_json)
                     if w[1] + ε_time < get_as(dt, t)[2] && get_as(dt, t)[2] <= w[2] + ε_time
                         push!(T_w_en_max_cs, (w_en_max_cs_ind = w_en_max_cs_ind,
                             j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
-                            get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                            j_cs=get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first),
                             t = t,
                             dt=dt[t]))
                     end
@@ -686,7 +727,8 @@ function parse_sc_data(data, uc_data, data_json)
                 for t in periods
                     if w[1] + ε_time < get_as(dt, t)[2] && get_as(dt, t)[2] <= w[2] + ε_time
                         push!(T_w_en_min_pr, (w_en_min_pr_ind=w_en_min_pr_ind, j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
-                        get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                        j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                        j_pr=get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first),
                         t = t,
                         dt = dt[t]))
                     end
@@ -704,7 +746,8 @@ function parse_sc_data(data, uc_data, data_json)
                 for t in periods
                     if w[1] + ε_time < get_as(dt, t)[2] && get_as(dt, t)[2] <= w[2] + ε_time
                         push!(T_w_en_min_cs, (w_en_min_cs_ind=w_en_min_cs_ind, j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1, 
-                        get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                        j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                        j_cs=get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first),
                         t = t,
                         dt = dt[t]))
                     end
@@ -848,7 +891,8 @@ function parse_sc_data(data, uc_data, data_json)
         prarray_pqbounds = isempty(val for val in values(data.sdd_lookup) if is_pr(val["uid"], L_J_pr, L_J_cs, producers_first) && val["q_bound_cap"]==1) ? 
                             empty_data = Vector{NamedTuple{(:j, :jprcs, :j_pr, :u_on, :sum2_T_supc_pr_jt, :sum2_T_sdpc_pr_jt, :beta_max, :beta_min, :q_max_p0, :q_min_p0, :t), Tuple{Int64, Int64, Int64, Int64, Int64, Int64, Float64, Float64, Float64, Float64, Int64}}}() : [
                             (;j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-                            get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                            j_pr=get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first),
                             u_on = uc["on_status"][t],
                             sum2_T_supc_pr_jt=sum2_T_supc_pr[p.j_pr, t], 
                             sum2_T_sdpc_pr_jt=sum2_T_sdpc_pr[p.j_pr, t], 
@@ -866,7 +910,8 @@ function parse_sc_data(data, uc_data, data_json)
         prarray_pqe = isempty(val for val in values(data.sdd_lookup) if is_pr(val["uid"], L_J_pr, L_J_cs, producers_first) && val["q_bound_cap"]==1) ? 
                             empty_data = Vector{NamedTuple{(:j, :jprcs, :j_pr, :u_on, :sum2_T_supc_pr_jt, :sum2_T_sdpc_pr_jt, :beta, :q_p0, :t), Tuple{Int64, Int64, Int64, Int64, Int64, Int64, Float64, Float64, Int64}}}() : [
                             (;j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-                            get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                            j_pr=get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first),
                             u_on = uc["on_status"][t],
                             sum2_T_supc_pr_jt=sum2_T_supc_pr[p.j_pr, t], 
                             sum2_T_sdpc_pr_jt=sum2_T_sdpc_pr[p.j_pr, t], 
@@ -895,7 +940,8 @@ function parse_sc_data(data, uc_data, data_json)
         csarray_pqbounds = isempty(val for val in values(data.sdd_lookup) if !is_pr(val["uid"], L_J_pr, L_J_cs, producers_first) && val["q_bound_cap"]==1) ? 
                             empty_data = Vector{NamedTuple{(:j, :jprcs, :j_cs, :u_on, :sum2_T_supc_cs_jt, :sum2_T_sdpc_cs_jt, :beta_max, :beta_min, :q_max_p0, :q_min_p0, :t), Tuple{Int64, Int64, Int64, Int64, Int64, Int64, Float64, Float64, Float64, Float64, Int64}}}() : [
                             (;j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-                            get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                            j_cs=get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
                             u_on = uc["on_status"][t],
                             sum2_T_supc_cs_jt=sum2_T_supc_cs[p.j_cs, t], 
                             sum2_T_sdpc_cs_jt=sum2_T_sdpc_cs[p.j_cs, t], 
@@ -913,7 +959,8 @@ function parse_sc_data(data, uc_data, data_json)
         csarray_pqe = isempty(val for val in values(data.sdd_lookup) if !is_pr(val["uid"], L_J_pr, L_J_cs, producers_first) && val["q_bound_cap"]==1) ? 
                             empty_data = Vector{NamedTuple{(:j, :jprcs, :j_cs, :u_on, :sum2_T_supc_cs_jt, :sum2_T_sdpc_cs_jt, :beta, :q_p0, :t), Tuple{Int64, Int64, Int64, Int64, Int64, Int64, Float64, Float64, Int64}}}() : [
                             (;j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1,
-                            get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)...,
+                            j_cs=get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first),
+                            j_prcs=get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first),
                             u_on = uc["on_status"][t],
                             sum2_T_supc_cs_jt=sum2_T_supc_cs[p.j_cs, t], 
                             sum2_T_sdpc_cs_jt=sum2_T_sdpc_cs[p.j_cs, t], 
