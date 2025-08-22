@@ -1,6 +1,7 @@
+is_pr(uid::Int, L_J_pr::Int, L_J_cs::Int, producers_first::Bool)::Bool = producers_first ? uid < L_J_pr : uid >= L_J_cs
 function is_pr(uid_str::String, L_J_pr::Int, L_J_cs::Int, producers_first::Bool)::Bool
-    id = parse(Int, match(r"\d+", uid_str).match)
-    producers_first ? id < L_J_pr : id >= L_J_cs
+    uid = parse(Int, match(r"\d+", uid_str).match)
+    is_pr(uid, L_J_pr, L_J_cs, producers_first)
 end
 
 function get_j_pr(uid_str::String, L_J_pr::Int, L_J_cs::Int, producers_first::Bool)
@@ -984,19 +985,22 @@ function parse_sc_data(data, uc_data, data_json)
     lengths = (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
     L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q, L_W_en_min_pr, L_W_en_min_cs, L_W_en_max_pr, L_W_en_max_cs, K)
 
-    return sc_time_data, lengths
+    return sc_time_data, lengths, producers_first
 end
 
-function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
+function save_go3_solution(uc_filename, solution_name, result, vars, lengths, producers_first)
     uc_data = JSON.parsefile(uc_filename)
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
     L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q, L_W_en_min_pr, L_W_en_min_cs, L_W_en_max_pr, L_W_en_max_cs, K) = lengths
     #Update simple dispatchable devices
     for line in uc_data["time_series_output"]["simple_dispatchable_device"]
-        solution_index = parse(Int, match(r"\d+", line["uid"]).match) + 1 #This corresponds to j_prcs
-        if solution_index > L_J_pr
+        raw_uid = parse(Int, match(r"\d+", line["uid"]).match)
+        solution_index = raw_uid + 1 #This corresponds to j_prcs
+        if !is_pr(raw_uid, L_J_pr, L_J_cs, producers_first)
             #This section corresponds to consuming devices
-            solution_index -= L_J_pr
+            if producers_first
+                solution_index -= L_J_pr
+            end
             line["p_syn_res"] = Array(solution(result, vars.p_jt_scr_cs))[solution_index,:]
             line["p_ramp_res_up_online"] = Array(solution(result, vars.p_jt_rru_on_cs))[solution_index,:]
             line["p_nsyn_res"] = zeros(L_T)
@@ -1011,6 +1015,9 @@ function save_go3_solution(uc_filename, solution_name, result, vars, lengths)
             line["p_ramp_res_down_offline"] = Array(solution(result, vars.p_jt_rrd_off_cs))[solution_index,:]
         else
             #Producing devices
+            if !producers_first
+                solution_index -= L_J_cs
+            end
             line["p_syn_res"] = Array(solution(result, vars.p_jt_scr_pr))[solution_index,:]
             line["p_ramp_res_up_online"] = Array(solution(result, vars.p_jt_rru_on_pr))[solution_index,:]
             line["p_nsyn_res"] = Array(solution(result, vars.p_jt_nsc_pr))[solution_index,:]
