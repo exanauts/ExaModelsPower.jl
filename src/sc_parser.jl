@@ -9,11 +9,13 @@ function get_j_prcs(uid_str::String, L_J_pr::Int, L_J_cs::Int, producers_first::
 end
 
 function get_j_pr(uid_str::String, L_J_pr::Int, L_J_cs::Int, producers_first::Bool)
-    parse(Int, match(r"\d+", uid_str).match) + 1 + (producers_first ? 0 : (-L_J_cs))
+    offset = Int64(producers_first ? 0 : (-L_J_cs))
+    parse(Int, match(r"\d+", uid_str).match) + 1 + offset
 end
 
 function get_j_cs(uid_str::String, L_J_pr::Int, L_J_cs::Int, producers_first::Bool)
-    parse(Int, match(r"\d+", uid_str).match) + 1 + (producers_first ? (-L_J_pr) : 0)
+    offset = Int64(producers_first ? (-L_J_pr) : 0)
+    parse(Int, match(r"\d+", uid_str).match) + 1 + offset
 end
 
 function parse_sc_data_static(data, producers_first)
@@ -101,24 +103,24 @@ function parse_sc_data_static(data, producers_first)
                     uid = val["uid"]
                     to_bus = parse(Int, match(r"\d+", val["to_bus"]).match)+1
                     fr_bus = parse(Int, match(r"\d+", val["fr_bus"]).match)+1
-                    c_su = val["connection_cost"]
-                    c_sd = val["disconnection_cost"]
-                    s_max = val["mva_ub_nom"]
-                    r = val["r"]
-                    x = val["x"]
-                    g_sr = r / (x^2 + r^2)
-                    b_sr = -x / (x^2 + r^2)
-                    b_ch = val["b"]
+                    c_su = Float64(val["connection_cost"])
+                    c_sd = Float64(val["disconnection_cost"])
+                    s_max = Float64(val["mva_ub_nom"])
+                    r = Float64(val["r"])
+                    x = Float64(val["x"])
+                    g_sr = Float64(r / (x^2 + r^2))
+                    b_sr = Float64(-x / (x^2 + r^2))
+                    b_ch = Float64(val["b"])
                     if val["additional_shunt"] == 1
-                        g_fr = val["g_fr"]
-                        g_to = val["g_to"]
-                        b_fr = val["b_fr"]
-                        b_to = val["b_to"]
+                        g_fr = Float64(val["g_fr"])
+                        g_to = Float64(val["g_to"])
+                        b_fr = Float64(val["b_fr"])
+                        b_to = Float64(val["b_to"])
                     else
-                        g_fr = 0
-                        g_to = 0
-                        b_fr = 0
-                        b_to = 0
+                        g_fr = 0.0
+                        g_to = 0.0
+                        b_fr = 0.0
+                        b_to = 0.0
                     end
                     (j = j, j_ac = j_ac, j_ln = j_ln, uid = uid, to_bus = to_bus, fr_bus = fr_bus, c_su = c_su, c_sd = c_sd, s_max = s_max, 
                     g_sr = g_sr, b_sr = b_sr, b_ch = b_ch, g_fr = g_fr, g_to = g_to, b_fr = b_fr, b_to = b_to)
@@ -225,18 +227,18 @@ function parse_sc_data_static(data, producers_first)
             [
                 begin
                     ts_val = data.sdd_ts_lookup[key]
-                    j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j = Int(parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1)
                     j_pr = get_j_pr(val["uid"], L_J_pr, L_J_cs, producers_first)
                     j_prcs = get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first)
-                    bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
-                    uid = val["uid"]
-                    c_on = val["on_cost"]
-                    c_su = val["startup_cost"]
-                    c_sd = val["shutdown_cost"]
-                    p_ru = val["p_ramp_up_ub"]
-                    p_rd = val["p_ramp_down_ub"]
-                    p_ru_su = val["p_startup_ramp_ub"]
-                    p_rd_sd = val["p_shutdown_ramp_ub"]
+                    bus = Int(parse(Int, match(r"\d+", val["bus"]).match) + 1)
+                    uid = String(val["uid"])
+                    c_on = Float64(val["on_cost"])
+                    c_su = Float64(val["startup_cost"])
+                    c_sd = Float64(val["shutdown_cost"])
+                    p_ru = Float64(val["p_ramp_up_ub"])
+                    p_rd = Float64(val["p_ramp_down_ub"])
+                    p_ru_su = Float64(val["p_startup_ramp_ub"])
+                    p_rd_sd = Float64(val["p_shutdown_ramp_ub"])
                     c_rgu = convert(Vector{Float64}, ts_val["p_reg_res_up_cost"]) #these need checks to see if empty
                     c_rgd = convert(Vector{Float64}, ts_val["p_reg_res_down_cost"])
                     c_scr = convert(Vector{Float64}, ts_val["p_syn_res_cost"])
@@ -247,21 +249,21 @@ function parse_sc_data_static(data, producers_first)
                     c_rrd_off = convert(Vector{Float64}, ts_val["p_ramp_res_down_offline_cost"])
                     c_qru = convert(Vector{Float64}, ts_val["q_res_up_cost"])
                     c_qrd = convert(Vector{Float64}, ts_val["q_res_down_cost"])
-                    p_rgu_max = val["p_reg_res_up_ub"]
-                    p_rgd_max = val["p_reg_res_down_ub"]
-                    p_scr_max = val["p_syn_res_ub"]
-                    p_nsc_max = val["p_nsyn_res_ub"]
-                    p_rru_on_max = val["p_ramp_res_up_online_ub"]
-                    p_rru_off_max = val["p_ramp_res_up_offline_ub"]
-                    p_rrd_on_max = val["p_ramp_res_down_online_ub"]
-                    p_rrd_off_max = val["p_ramp_res_down_offline_ub"]
-                    p_0 = val["initial_status"]["p"]
-                    q_0 = val["initial_status"]["q"]
+                    p_rgu_max = Float64(val["p_reg_res_up_ub"])
+                    p_rgd_max = Float64(val["p_reg_res_down_ub"])
+                    p_scr_max = Float64(val["p_syn_res_ub"])
+                    p_nsc_max = Float64(val["p_nsyn_res_ub"])
+                    p_rru_on_max = Float64(val["p_ramp_res_up_online_ub"])
+                    p_rru_off_max = Float64(val["p_ramp_res_up_offline_ub"])
+                    p_rrd_on_max = Float64(val["p_ramp_res_down_online_ub"])
+                    p_rrd_off_max = Float64(val["p_ramp_res_down_offline_ub"])
+                    p_0 = Float64(val["initial_status"]["p"])
+                    q_0 = Float64(val["initial_status"]["q"])
                     p_max = convert(Vector{Float64}, ts_val["p_ub"])
                     p_min = convert(Vector{Float64}, ts_val["p_lb"])
                     q_max = convert(Vector{Float64}, ts_val["q_ub"])
                     q_min = convert(Vector{Float64}, ts_val["q_lb"])
-                    sus = val["startup_states"]
+                    sus = convert(Vector{Vector{Float64}}, val["startup_states"])
                     
                     (j = j, j_pr=j_pr, j_prcs=j_prcs, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
                     c_rgu = c_rgu, c_rgd = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
@@ -269,25 +271,24 @@ function parse_sc_data_static(data, producers_first)
                     p_rru_off_max=p_rru_off_max, p_rrd_on_max=p_rrd_on_max, p_rrd_off_max=p_rrd_off_max, p_0=p_0, q_0=q_0, p_max=p_max, p_min=p_min, q_max=q_max, q_min=q_min, sus=sus)
                 end for (key, val) in data.sdd_lookup if val["device_type"] == "producer"
             ], by = x -> x.j),
-        
             
         #Consumers
         cons = sort(
             [
                 begin
                     ts_val = data.sdd_ts_lookup[key]
-                    j = parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1
+                    j = Int(parse(Int, match(r"\d+", val["uid"]).match) + L_J_br + 1)
                     j_prcs = get_j_prcs(val["uid"], L_J_pr, L_J_cs, producers_first)
                     j_cs = get_j_cs(val["uid"], L_J_pr, L_J_cs, producers_first)
-                    bus = parse(Int, match(r"\d+", val["bus"]).match) + 1
-                    uid = val["uid"]
-                    c_on = val["on_cost"]
-                    c_su = val["startup_cost"]
-                    c_sd = val["shutdown_cost"]
-                    p_ru = val["p_ramp_up_ub"]
-                    p_rd = val["p_ramp_down_ub"]
-                    p_ru_su = val["p_startup_ramp_ub"]
-                    p_rd_sd = val["p_shutdown_ramp_ub"]
+                    bus = Int(parse(Int, match(r"\d+", val["bus"]).match) + 1)
+                    uid = String(val["uid"])
+                    c_on = Float64(val["on_cost"])
+                    c_su = Float64(val["startup_cost"])
+                    c_sd = Float64(val["shutdown_cost"])
+                    p_ru = Float64(val["p_ramp_up_ub"])
+                    p_rd = Float64(val["p_ramp_down_ub"])
+                    p_ru_su = Float64(val["p_startup_ramp_ub"])
+                    p_rd_sd = Float64(val["p_shutdown_ramp_ub"])
                     c_rgu = convert(Vector{Float64}, ts_val["p_reg_res_up_cost"])
                     c_rgd = convert(Vector{Float64}, ts_val["p_reg_res_down_cost"])
                     c_scr = convert(Vector{Float64}, ts_val["p_syn_res_cost"])
@@ -298,21 +299,21 @@ function parse_sc_data_static(data, producers_first)
                     c_rrd_off = convert(Vector{Float64}, ts_val["p_ramp_res_down_offline_cost"])
                     c_qru = convert(Vector{Float64}, ts_val["q_res_up_cost"])
                     c_qrd = convert(Vector{Float64}, ts_val["q_res_down_cost"])
-                    p_rgu_max = val["p_reg_res_up_ub"]
-                    p_rgd_max = val["p_reg_res_down_ub"]
-                    p_scr_max = val["p_syn_res_ub"]
-                    p_nsc_max = val["p_nsyn_res_ub"]
-                    p_rru_on_max = val["p_ramp_res_up_online_ub"]
-                    p_rru_off_max = val["p_ramp_res_up_offline_ub"]
-                    p_rrd_on_max = val["p_ramp_res_down_online_ub"]
-                    p_rrd_off_max = val["p_ramp_res_down_offline_ub"]
-                    p_0 = val["initial_status"]["p"]
-                    q_0 = val["initial_status"]["q"]
+                    p_rgu_max = Float64(val["p_reg_res_up_ub"])
+                    p_rgd_max = Float64(val["p_reg_res_down_ub"])
+                    p_scr_max = Float64(val["p_syn_res_ub"])
+                    p_nsc_max = Float64(val["p_nsyn_res_ub"])
+                    p_rru_on_max = Float64(val["p_ramp_res_up_online_ub"])
+                    p_rru_off_max = Float64(val["p_ramp_res_up_offline_ub"])
+                    p_rrd_on_max = Float64(val["p_ramp_res_down_online_ub"])
+                    p_rrd_off_max = Float64(val["p_ramp_res_down_offline_ub"])
+                    p_0 = Float64(val["initial_status"]["p"])
+                    q_0 = Float64(val["initial_status"]["q"])
                     p_max = convert(Vector{Float64}, ts_val["p_ub"])
                     p_min = convert(Vector{Float64}, ts_val["p_lb"])
                     q_max = convert(Vector{Float64}, ts_val["q_ub"])
                     q_min = convert(Vector{Float64}, ts_val["q_lb"])
-                    sus = val["startup_states"]
+                    sus = convert(Vector{Vector{Float64}}, val["startup_states"])
 
                     (j = j, j_cs=j_cs, j_prcs=j_prcs, bus=bus, uid = uid, c_on = c_on, c_su = c_su, c_sd = c_sd, p_ru = p_ru, p_rd = p_rd, p_ru_su = p_ru_su, p_rd_sd = p_rd_sd, 
                     c_rgu = c_rgu, c_rgd = c_rgd, c_scr = c_scr, c_nsc = c_nsc, c_rru_on = c_rru_on, c_rru_off = c_rru_off, c_rrd_on = c_rrd_on, c_rrd_off = c_rrd_off, 
@@ -462,6 +463,7 @@ end
 function parse_sc_data(data, uc_data, data_json)
     producers_first = data.sdd_lookup[minimum(keys(data.sdd_lookup))]["device_type"] == "producer"
     sc_data, lengths, cost_vector_pr, cost_vector_cs = parse_sc_data_static(data, producers_first)
+    @info typeof(sc_data)
     
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
     L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q) = lengths
