@@ -52,6 +52,15 @@ function example_func(d, srating)
     return d + 20/srating*d^2
 end
 
+function sc_tests(filename)
+    uc_filename = "$filename.pop_solution.json"
+    model, sc_data_array, vars, lengths = ExaModelsPower.scopf_model(filename, uc_filename; backend=CUDABackend())
+    @info "built model"
+    result = madnlp(model; print_level = MadNLP.ERROR, tol=8e-3, linear_solver=MadNLPGPU.CUDSSSolver)
+    JLD2.save("result.jld2", "solution", result, "vars", vars, "lens", lens)
+    ExaModelsPower.save_go3_solution(uc_filename, "solution_go3", result, vars, lengths)
+end
+
 PowerModels.silence()
 
 function parse_pm(filename)
