@@ -153,7 +153,7 @@ end
 
 
 
-function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results_opf.tex")
+function generate_tex_opf(opf_results::Dict; filename="benchmark_results_opf.tex")
 
     df_top = opf_results[:top]
     df_lifted_kkt = opf_results[:lifted_kkt]
@@ -161,11 +161,11 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     df_madncl = opf_results[:madncl]
     df_ma27 = opf_results[:ma27]
     df_ma86 = opf_results[:ma86]
-    df_ma97 = opf_results[:ma97]
+    #df_ma97 = opf_results[:ma97]
     
 
     methods = ["MadNLP+LiftedKKT (GPU)", "MadNLP+HybridKKT (GPU)", "MadNCL (GPU)",
-            "Ipopt+Ma27 (CPU)","Ipopt+Ma86 (CPU)","Ipopt+Ma97 (CPU)"]
+            "Ipopt+Ma27 (CPU)","Ipopt+Ma86 (CPU)",]#"Ipopt+Ma97 (CPU)"]
     subs = Dict(
         "MadNLP+LiftedKKT (GPU)" => [:iter, :soltime, :inittime, :adtime,
                           :lintime, :termination, :obj, :cvio],
@@ -179,8 +179,8 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
                           :termination, :obj, :cvio],
         "MadNLP+Ma86 (CPU)" => [:iter, :soltime, :inittime, :adtime,
                           :lintime, :termination, :obj, :cvio],
-        "Ipopt+Ma97 (CPU)" => [:iter, :soltime, :adtime,
-                          :termination, :obj, :cvio],
+        #"Ipopt+Ma97 (CPU)" => [:iter, :soltime, :adtime,
+        #                  :termination, :obj, :cvio],
     )
 
     format_val(field, val) =
@@ -205,10 +205,10 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         raw_row = Any[clean_case, row_top.nvar, row_top.ncon]
 
         methods = ["MadNLP+LiftedKKT (GPU)", "MadNLP+HybridKKT (GPU)", "MadNCL (GPU)",
-            "Ipopt+Ma27 (CPU)","MadNLP+Ma86 (CPU)","Ipopt+Ma97 (CPU)"]
+            "Ipopt+Ma27 (CPU)","MadNLP+Ma86 (CPU)",]#"Ipopt+Ma97 (CPU)"]
         for (df, method) in [(df_lifted_kkt, "MadNLP+LiftedKKT (GPU)"), (df_hybrid_kkt, "MadNLP+HybridKKT (GPU)"),
                             (df_madncl, "MadNCL (GPU)"), (df_ma27, "Ipopt+Ma27 (CPU)"),
-                            (df_ma86, "MadNLP+Ma86 (CPU)"), (df_ma97, "Ipopt+Ma97 (CPU)")]
+                            (df_ma86, "MadNLP+Ma86 (CPU)"),]# (df_ma97, "Ipopt+Ma97 (CPU)")]
             df_row = df[i, :]
             for field in subs[method]
                 val = get(df_row, field, missing)
@@ -248,7 +248,8 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
 
     vlines = group_boundaries(methods, subs)
 
-    open(filename, "w") do io
+    tex_filename = replace(filename, r"\.csv$" => ".tex")
+    open(tex_filename, "w") do io
         pretty_table(
             io, table_data;
             header = (h_top, h_bottom),
@@ -261,7 +262,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     end
 
     # Text file
-    txt_filename = replace(filename, r"\.tex$" => ".txt")
+    txt_filename = replace(filename, r"\.csv$" => ".txt")
     open(txt_filename, "w") do io
         pretty_table(
             io, table_data;
@@ -272,7 +273,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     end
 
     # Raw CSV
-    csv_filename = replace(filename, r"\.tex$" => ".csv")
+    csv_filename = filename
     flat_header = vcat(["Case", "nvars", "ncons"], vcat([
         string(m, "_", f) for m in methods for f in subs[m]
     ]))
@@ -281,9 +282,9 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
 
 
     # Full comparison
-    selected = Dict(k => opf_results[k] for k in [:lifted_kkt, :hybrid_kkt, :madncl, :ma27, :ma86, :ma97])
+    selected = Dict(k => opf_results[k] for k in [:lifted_kkt, :hybrid_kkt, :madncl, :ma27, :ma86,])# :ma97])
     p = performance_profile(selected, df -> df.soltime)
-    Plots.svg(p, replace(filename, r"\.tex$" => ""))
+    Plots.svg(p, replace(filename, r"\.csv$" => ""))
 
     small_list = Int64[]
     med_list= Int64[]
@@ -300,7 +301,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     end
     
     # Small: nvar < 2000
-    ordered_keys = [:lifted_kkt, :hybrid_kkt, :madncl, :ma27, :ma86, :ma97]
+    ordered_keys = [:lifted_kkt, :hybrid_kkt, :madncl, :ma27, :ma86,]# :ma97]
 
     selected = OrderedDict(
         k => filter(row -> row.id in small_list, opf_results[k])
@@ -310,7 +311,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     # Now build an ordered list of Pairs
     if !isempty(selected[:lifted_kkt])
         p = performance_profile(selected, df -> df.soltime)
-        Plots.svg(p, replace(filename, r"\.tex$" => "_small"))
+        Plots.svg(p, replace(filename, r"\.csv$" => "_small"))
     end
 
 
@@ -323,7 +324,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     # Now build an ordered list of Pairs
     if !isempty(selected[:lifted_kkt])
         p = performance_profile(selected, df -> df.soltime)
-        Plots.svg(p, replace(filename, r"\.tex$" => "_medium"))
+        Plots.svg(p, replace(filename, r"\.csv$" => "_medium"))
     end
 
     # Large: nvar > 20000
@@ -335,7 +336,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
     # Now build an ordered list of Pairs
     if !isempty(selected[:lifted_kkt])
         p = performance_profile(selected, df -> df.soltime)
-        Plots.svg(p, replace(filename, r"\.tex$" => "_large"))
+        Plots.svg(p, replace(filename, r"\.csv$" => "_large"))
     end
 
 
@@ -352,7 +353,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         ("MadNCL (GPU)", df_madncl),
         ("Ipopt+Ma27 (CPU)", df_ma27),
         ("MadNLP+Ma86 (CPU)", df_ma86),
-        ("Ipopt+Ma97 (CPU)", df_ma97)
+        #("Ipopt+Ma97 (CPU)", df_ma97)
     ]
         nv = Float64[]
         speedup = Float64[]
@@ -380,7 +381,7 @@ function generate_tex_opf(opf_results::Dict, coords; filename="benchmark_results
         scatter!(p, nv, speedup; label = method, ms=4)
     end
 
-    svg_speedup = replace(filename, r"\.tex$" => "_speedup_vs_ma27.svg")
+    svg_speedup = replace(filename, r"\.csv$" => "_speedup_vs_ma27.svg")
     savefig(p, svg_speedup)
 
 
@@ -579,6 +580,34 @@ function save_opf_results(opf_results, path)
     CSV.write(path, all_dfs)
 end
 
+function merge_static_data(gpu_filename, cpu_filename, save_folder)
+    gpu_results = CSV.read(gpu_filename, DataFrame)
+    cpu_results = CSV.read(cpu_filename, DataFrame)
+
+    df_top = select(gpu_results, r"_top$")
+    rename!(df_top, Symbol.(replace.(String.(names(df_top)), "_top" => "")))
+    df_lifted_kkt = select(gpu_results, r"lifted_kkt$")
+    rename!(df_lifted_kkt, Symbol.(replace.(String.(names(df_lifted_kkt)), "_lifted_kkt" => "")))
+    df_hybrid_kkt = select(gpu_results, r"hybrid_kkt$")
+    rename!(df_hybrid_kkt, Symbol.(replace.(String.(names(df_hybrid_kkt)), "_hybrid_kkt" => "")))
+    df_madncl = select(gpu_results, r"madncl$")
+    rename!(df_madncl, Symbol.(replace.(String.(names(df_madncl)), "_madncl" => "")))
+    df_ma27 = select(cpu_results, r"ma27$")
+    rename!(df_ma27, Symbol.(replace.(String.(names(df_ma27)), "_ma27" => "")))
+    df_ma86 = select(cpu_results, r"ma86$")
+    rename!(df_ma86, Symbol.(replace.(String.(names(df_ma86)), "_ma86" => "")))
+
+    opf_results = Dict(:top => df_top,
+                :lifted_kkt => df_lifted_kkt,
+                :hybrid_kkt => df_hybrid_kkt,
+                :madncl => df_madncl,
+                :ma27 => df_ma27,
+                :ma86 => df_ma86)
+    
+    generate_tex_opf(opf_results; filename = save_folder*replace(replace(gpu_filename, "_GPU" => ""), "saved_raw_data/" => ""))
+end
+    
+
 
 function solve_static_cases(cases, tol, coords, hardware; case_style = "default")
 
@@ -595,6 +624,29 @@ function solve_static_cases(cases, tol, coords, hardware; case_style = "default"
         error("Wrong coords")
     end
 
+    existing_results = Dict{Symbol,DataFrame}()
+    if isfile(csv_filename)
+        file_exists = true
+        println("Found existing results at $csv_filename")
+        existing_results = CSV.read(csv_filename, DataFrame)
+    else
+        file_exists = false
+    end
+
+
+    
+
+    if !file_exists
+        df_top = DataFrame(
+            nvar = Int[],
+            ncon = Int[],
+            case_name = String[]
+        )
+    else
+        df_top = select(existing_results, r"_top$")
+        rename!(df_top, Symbol.(replace.(String.(names(df_top)), "_top" => "")))
+    end
+
     #Compile time on smallest case
     if hardware == "GPU"
         model_gpu, ~ = opf_model("pglib_opf_case3_lmbd"; backend = CUDABackend(), form=form)
@@ -605,30 +657,57 @@ function solve_static_cases(cases, tol, coords, hardware; case_style = "default"
                                             kkt_system=HybridKKT.HybridCondensedKKTSystem,
                                             equality_treatment=MadNLP.EnforceEquality,
                                             fixed_variable_treatment=MadNLP.MakeParameter, max_iter = 3)
-        df_lifted_kkt = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
-        termination = String[], obj = Float64[], cvio = Float64[])
-        df_hybrid_kkt = similar(df_lifted_kkt)
-        df_madncl = similar(df_lifted_kkt)
+        
+        if !file_exists
+            df_lifted_kkt = DataFrame(
+                id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[],
+                adtime = Float64[], lintime = Float64[], termination = String[],
+                obj = Float64[], cvio = Float64[]
+            )
+            df_hybrid_kkt = similar(df_lifted_kkt)
+            df_madncl = similar(df_lifted_kkt)
+        else
+            df_lifted_kkt = select(existing_results, r"lifted_kkt$")
+            rename!(df_lifted_kkt, Symbol.(replace.(String.(names(df_lifted_kkt)), "_lifted_kkt" => "")))
+            df_hybrid_kkt = select(existing_results, r"hybrid_kkt$")
+            rename!(df_hybrid_kkt, Symbol.(replace.(String.(names(df_hybrid_kkt)), "_hybrid_kkt" => "")))
+            df_madncl = select(existing_results, r"madncl$")
+            rename!(df_madncl, Symbol.(replace.(String.(names(df_madncl)), "_madncl" => "")))
+        end
+        
+        
     elseif hardware == "CPU"
         model_cpu, ~ = opf_model("pglib_opf_case3_lmbd"; form=form)
         ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma27")
-        ~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
+        #~ = ipopt(model_cpu, tol = tol, max_iter = 3, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97")
         ~ = madnlp(model_cpu, tol = tol,
                 kkt_system=MadNLP.SparseCondensedKKTSystem, equality_treatment=MadNLP.RelaxEquality, 
                 fixed_variable_treatment=MadNLP.RelaxBound, dual_initialized=true,
                 linear_solver=MadNLPHSL.Ma86Solver, ma86_num_threads=28, max_iter = 3)
 
-        df_ma27 = DataFrame(id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[], termination = String[], obj = Float64[], cvio = Float64[])
-        df_ma86 = DataFrame(id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[], adtime = Float64[], lintime = Float64[], 
-        termination = String[], obj = Float64[], cvio = Float64[])
-        df_ma97 = similar(df_ma27)
+        if !file_exists
+            df_ma27 = DataFrame(
+                id = Int[], iter = Int[], soltime = Float64[], adtime = Float64[],
+                termination = String[], obj = Float64[], cvio = Float64[]
+            )
+            df_ma86 = DataFrame(
+                id = Int[], iter = Float64[], soltime = Float64[], inittime = Float64[],
+                adtime = Float64[], lintime = Float64[], termination = String[],
+                obj = Float64[], cvio = Float64[]
+            )
+            #df_ma97 = similar(df_ma27)
+        else
+            df_ma27 = select(existing_results, r"ma27$")
+            rename!(df_ma27, Symbol.(replace.(String.(names(df_ma27)), "_ma27" => "")))
+            df_ma86 = select(existing_results, r"ma86$")
+            rename!(df_ma86, Symbol.(replace.(String.(names(df_ma86)), "_ma86" => "")))
+        end
     else
         error("Invalid hardware input")
     end
 
-
-    df_top = DataFrame(nvar = Int[], ncon = Int[], case_name = String[])
-
+    existing_cases = Set(df_top.case_name)
+    println("Already have $(length(existing_cases)) cases stored.")
     
 
     for (i, case) in enumerate(cases)
@@ -644,6 +723,10 @@ function solve_static_cases(cases, tol, coords, hardware; case_style = "default"
             error("Invalid case style")
         end
 
+        if case in existing_cases
+            println("Skipping $case (already in results)")
+            continue
+        end
 
         if hardware == "GPU"
             #GPU 
@@ -658,12 +741,16 @@ function solve_static_cases(cases, tol, coords, hardware; case_style = "default"
             catch e
                 if occursin("Out of GPU memory", sprint(showerror, e))
                     @warn "GPU OOM on this problem, skipping..."
-                    push!(df_lifted_kkt, (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+                    push!(df_lifted_kkt, (i, "-", max_wall_time, "-", "-", "-", "me", "-", "-"))
                 else
                     rethrow(e)
                 end
             end
             
+            result_lifted_kkt = nothing
+            GC.gc()
+            CUDA.reclaim()
+
             try
 
                 solver = MadNLP.MadNLPSolver(m_gpu; tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true, linear_solver=MadNLPGPU.CUDSSSolver,
@@ -680,11 +767,15 @@ function solve_static_cases(cases, tol, coords, hardware; case_style = "default"
             catch e
                 if occursin("Out of GPU memory", sprint(showerror, e))
                     @warn "GPU OOM on this problem, skipping..."
-                    push!(df_hybrid_kkt, (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+                    push!(df_hybrid_kkt, (i, "-", max_wall_time, "-", "-", "-", "me", "-", "-"))
                 else
                     rethrow(e)
                 end
             end
+
+            result_hybrid_kkt = nothing
+            GC.gc()
+            CUDA.reclaim()
 
             try
                 result_madncl = MadNCL.madncl(m_gpu, tol=tol, max_wall_time = max_wall_time, disable_garbage_collector=true, dual_initialized=true)
@@ -694,11 +785,15 @@ function solve_static_cases(cases, tol, coords, hardware; case_style = "default"
             catch e
                 if occursin("Out of GPU memory", sprint(showerror, e))
                     @warn "GPU OOM on this problem, skipping..."
-                    push!(df_madncl, (i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+                    push!(df_madncl, (i, "-", max_wall_time, "-", "-", "-", "me", "-", "-"))
                 else
                     rethrow(e)
                 end
             end
+
+            result_madncl = nothing
+            GC.gc()
+            CUDA.reclaim()
 
             opf_results = Dict(:top => df_top,
             :lifted_kkt => df_lifted_kkt,
@@ -723,26 +818,26 @@ function solve_static_cases(cases, tol, coords, hardware; case_style = "default"
             push!(df_ma86, (i, result_ma86.counters.k, result_ma86.counters.total_time, result_ma86.counters.init_time, result_ma86.counters.eval_function_time, 
                 result_ma86.counters.linear_solver_time, termination_code(result_ma86.status), result_ma86.objective, c))
 
-            result_ma97 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
+            #=result_ma97 = ipopt(m_cpu, tol = tol, max_wall_time=max_wall_time, dual_inf_tol=Float64(10000), constr_viol_tol=Float64(10000), compl_inf_tol=Float64(10000), bound_relax_factor = tol, linear_solver = "ma97", honor_original_bounds = "no", print_timing_statistics = "yes", output_file = "ipopt_output")
             it, tot, ad = ipopt_stats("ipopt_output")
             c = evaluate(m_cpu, result_ma97)
-            push!(df_ma97, (i, it, tot, ad, termination_code(result_ma97.solver_specific[:internal_msg]), result_ma97.objective, c))
+            push!(df_ma97, (i, it, tot, ad, termination_code(result_ma97.solver_specific[:internal_msg]), result_ma97.objective, c))=#
 
             opf_results = Dict(:top => df_top,
                 :ma27 => df_ma27,
-                :ma86 => df_ma86,
-                :ma97 => df_ma97)
+                :ma86 => df_ma86,)
+                #:ma97 => df_ma97)
         end
 
         save_opf_results(opf_results, csv_filename)
     end
 
-    
+end    
     
     #generate_tex_opf(opf_results, coords; filename = "select_saved_data/benchmark_results_opf_" * case_style * "_tol_" * replace(@sprintf("%.0e", 1 / tol), r"\+0?" => "")*"_"*coords*".tex")
 
     #return opf_results
-end
+#end
 
 curves = Dict("easy" => [.64, .60, .58, .56, .56, .58, .64, .76, .87, .95, .99, 1.0, .99, 1.0, 1.0,
     .97, .96, .96, .93, .92, .92, .93, .87, .72, .64],
@@ -1498,7 +1593,7 @@ function solve_sc_cases(cases, tol, include_ctg, hardware)
             catch e
                 if occursin("Out of GPU memory", sprint(showerror, e))
                     @warn "GPU OOM on this problem, skipping..."
-                    push!(df_lifted_kkt,(i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+                    push!(df_hybrid_kkt,(i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
                 else
                     rethrow(e)
                 end
@@ -1512,7 +1607,7 @@ function solve_sc_cases(cases, tol, include_ctg, hardware)
             catch e
                 if occursin("Out of GPU memory", sprint(showerror, e))
                     @warn "GPU OOM on this problem, skipping..."
-                    push!(df_lifted_kkt,(i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
+                    push!(df_madncl,(i, 9999, 9999, 9999, 9999, 9999, "me", 9999, 9999))
                 else
                     rethrow(e)
                 end
