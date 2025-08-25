@@ -13,7 +13,8 @@ function scopf_model(
     uc_data = JSON.parsefile(uc_filename)
     data = GOC3Benchmark.get_data_from_file(filename)
     data_json = JSON.parsefile(filename)
-    sc_data, lengths = parse_sc_data(data, uc_data, data_json)
+    sc_data, lengths, producers_first = parse_sc_data(data, uc_data, data_json)
+    @info "parsed data"
     
     (L_J_xf, L_J_ln, L_J_ac, L_J_dc, L_J_br, L_J_cs,
     L_J_pr, L_J_cspr, L_J_sh, I, L_T, L_N_p, L_N_q, L_W_en_min_pr,
@@ -674,6 +675,7 @@ function scopf_model(
         end
 
    
+    @info "built model"
     return model, sc_data_array, vars, lengths
 
 end

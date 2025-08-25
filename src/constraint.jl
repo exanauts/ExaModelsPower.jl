@@ -1,5 +1,6 @@
+# cost1
 function gen_cost(g, pg)
-    return g.cost1 * pg^2 + g.cost2 * pg + g.cost3 
+    return g.c[1] * pg^2 + g.c[2] * pg + g.c[3]
 end
 
 function c_ref_angle_polar(va)
@@ -46,7 +47,7 @@ end
 
 #no coordinates specified
 function c_thermal_limit(b, p,q)
-    return p^2 + q^2 - b.rate_a_sq
+    return p^2 + q^2 - b.rate_a^2
 end
 
 #only for mp
@@ -125,15 +126,15 @@ function c_ohms_rect(pst, qst, vr, vim, I2)
 end
 
 function c_stor_state(s, E0, E1, pstc, pstd)
-    return E0 - E1 - (s.etac*pstc - pstd/s.etad)
+    return E0 - E1 - (s.charge_efficiency*pstc - pstd/s.discharge_efficiency)
 end
 
 function c_storage_state_smooth(s, E0, E1, discharge_func::Function, pstd)
-    return E0 - E1 + discharge_func(pstd, s.Srating)
+    return E0 - E1 + discharge_func(pstd, s.thermal_rating)
 end
 
 function c_transfer_lim(s, pst, qst)
-    return pst^2 + qst^2 - s.Srating^2
+    return pst^2 + qst^2 - s.thermal_rating^2
 end
 
 #used for charge and discharge limits

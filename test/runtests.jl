@@ -3,10 +3,10 @@ using Test, ExaModelsPower, MadNLP, MadNLPGPU, KernelAbstractions, CUDA, PowerMo
 include("opf_tests.jl")
 
 const CONFIGS = [
-    (Float32, nothing),
     (Float64, nothing),
-    (Float32, CPU()),
     (Float64, CPU()),
+    (Float32, nothing),
+    (Float32, CPU()),
 ]
 
 if CUDA.has_cuda_gpu()
@@ -52,6 +52,25 @@ function example_func(d, srating)
     return d + 20/srating*d^2
 end
 
+function sc_tests(filename)
+    uc_filename = "$filename.pop_solution.json"
+    model, sc_data_array, vars, lengths = ExaModelsPower.scopf_model(filename, uc_filename; backend=CUDABackend())
+    @info "built model"
+    result = madnlp(model; print_level = MadNLP.ERROR, tol=8e-3, linear_solver=MadNLPGPU.CUDSSSolver)
+    JLD2.save("result.jld2", "solution", result, "vars", vars, "lens", lens)
+    ExaModelsPower.save_go3_solution(uc_filename, "solution_go3", result, vars, lengths)
+end
+
+PowerModels.silence()
+
+function parse_pm(filename)
+    data = PowerModels.parse_file(filename)
+    PowerModels.standardize_cost_terms!(data, order = 2)
+    PowerModels.calc_thermal_limits!(data)
+
+    return data
+end
+
 function runtests()
     @testset "ExaModelsPower test" begin
 
@@ -59,8 +78,7 @@ function runtests()
 
             for (filename, case, test_function) in test_cases
                 #Test static opf
-                data, dicts = ExaModelsPower.parse_ac_power_data(filename)
-                data_pm = PowerModels.parse_file(filename)
+                data_pm = parse_pm(filename)
 
                 #Polar tests
                 m, v, c = opf_model(filename; T=T, backend = backend)
@@ -83,8 +101,8 @@ function runtests()
                         result = madnlp(m64; print_level = MadNLP.ERROR)
                         test_float32(m, m64, result, backend)
                     else
-                        eval(test_function)(result, result_pm, result_nlp_pm, dicts, pg, qg, p, q)
-                        test_polar_voltage(result, result_pm, dicts, va, vm)
+                        eval(test_function)(result, result_pm, result_nlp_pm, pg, qg, p, q)
+                        test_polar_voltage(result, result_pm, va, vm)
                     end
                 end
 
@@ -107,14 +125,14 @@ function runtests()
                         result = madnlp(m64; print_level = MadNLP.ERROR)
                         test_float32(m, m64, result, backend)
                     else
-                        eval(test_function)(result, result_pm, result_nlp_pm, dicts, pg, qg, p, q)
-                        test_rect_voltage(result, result_pm, dicts, vr, vim)
+                        eval(test_function)(result, result_pm, result_nlp_pm, pg, qg, p, q)
+                        test_rect_voltage(result, result_pm, vr, vim)
                     end
                 end
             end
             
             #Test MP
-            for (form_str, symbol) in [("polar", :polar), ("rect", :rect)]
+            for (form_str, symbol) in [("rect", :rect), ("polar", :polar)]
                 for (filename, case, Pd_pregen, Qd_pregen, true_sol_curve, true_sol_pregen) in mp_test_cases
                     #Curve = [1, .9, .8, .95, 1]
 
@@ -169,7 +187,7 @@ function runtests()
                     end
                 end
                 
-                #Test MP w storage
+                # Test MP w storage
                 for (filename, case, Pd_pregen, Qd_pregen, true_sol_curve_stor, 
                     true_sol_curve_stor_func, true_sol_pregen_stor, true_sol_pregen_stor_func) in mp_stor_test_cases
                     

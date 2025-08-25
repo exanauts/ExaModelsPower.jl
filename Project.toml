@@ -3,35 +3,37 @@ uuid = "2fff4b78-0b6c-428d-bac8-85ccea8c4bdf"
 version = "0.1.0"
 
 [deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
-PGLib = "07a8691f-3d11-4330-951b-3c50f98338be"
-PowerModels = "c36e90e8-916a-50a6-bd94-075b64ef4655"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
+ExaPowerIO = "14903efe-9500-4d7f-a589-7ab7e15da6de"
+GOC3Benchmark = "3a45b339-860d-44d0-a64b-5f943cdd120b"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
-GOC3Benchmark = "3a45b339-860d-44d0-a64b-5f943cdd120b"
-Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+
+[sources]
+ExaPowerIO = {rev = "003970f", url = "https://github.com/MadNLP/ExaPowerIO.jl"}
+GOC3Benchmark = {rev = "588f356", url = "https://github.com/lanl-ansi/GOC3Benchmark.jl"}
 
 [compat]
-ExaModels = "~0.9"
-PowerModels = "~0.21"
-JLD2 = "~0.5"
 CUDA = "5 - 5.8.2"
+ExaModels = "0.9.1"
+ExaPowerIO = "0.2.0"
+JLD2 = "~0.5"
 MadNLP = "~0.8"
 MadNLPGPU = "~0.7"
 
 [extras]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+Ipopt = "b6b21f68-93f8-5de0-b562-5493be1d77c9"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 MadNLP = "2621e9c9-9eb4-46b1-8089-e8c72242dfb6"
 MadNLPGPU = "d72a61cc-809d-412f-99be-fd81f4b8a598"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-Ipopt = "b6b21f68-93f8-5de0-b562-5493be1d77c9"
-JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 NLPModelsJuMP = "792afdf1-32c1-5681-94e0-d7bf7a5df49e"
+PowerModels = "c36e90e8-916a-50a6-bd94-075b64ef4655"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "MadNLP", "MadNLPGPU", "KernelAbstractions", "CUDA", "Ipopt", "JuMP", "NLPModelsJuMP"]
-
-[sources]
-GOC3Benchmark = {url = "https://github.com/lanl-ansi/GOC3Benchmark.jl", rev = "588f356"}	
+test = ["Test", "MadNLP", "MadNLPGPU", "KernelAbstractions", "CUDA", "Ipopt", "JuMP", "NLPModelsJuMP", "PowerModels"]
